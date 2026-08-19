@@ -31,12 +31,15 @@ function extractJobDirectlyFromPage(): JobMetadata {
   const url = window.location.href;
   const host = window.location.hostname.toLowerCase();
 
-  let platform: JobMetadata['platform'] = 'other';
-  if (host.includes('internshala')) platform = 'internshala';
-  else if (host.includes('linkedin')) platform = 'linkedin';
-  else if (host.includes('indeed')) platform = 'indeed';
-  else if (host.includes('careers') || host.includes('jobs') || host.includes('greenhouse') || host.includes('lever')) {
-    platform = 'career_portal';
+  const BLACKLIST = [
+    'notification', 'notifications', '1 notification', 'messaging', 'my network',
+    'home', 'jobs', 'search', 'describe the job you want', 'feed', 'internshala',
+    'linkedin', 'indeed', 'sign in', 'login', 'apply now', 'easy apply'
+  ];
+
+  function isBad(t: string): boolean {
+    const c = t.toLowerCase().trim();
+    return BLACKLIST.some(b => c === b || c.startsWith(b));
   }
 
   let title = '';
@@ -46,99 +49,138 @@ function extractJobDirectlyFromPage(): JobMetadata {
   let description = '';
   let recruiterEmail = '';
 
-  // 1. JSON-LD Schema.org Check
-  try {
-    const scripts = document.querySelectorAll('script[type="application/ld+json"]');
-    for (const script of Array.from(scripts)) {
-      const json = JSON.parse(script.textContent || '');
-      const items = Array.isArray(json) ? json : [json];
-      for (const item of items) {
-        if (item['@type'] === 'JobPosting' || item['@type']?.includes?.('JobPosting')) {
-          const hiringOrg = typeof item.hiringOrganization === 'string'
-            ? item.hiringOrganization
-            : item.hiringOrganization?.name || '';
-          return {
-            title: item.title || item.name || '',
-            company: hiringOrg,
-            description: item.description || '',
-            location: typeof item.jobLocation === 'string' ? item.jobLocation : item.jobLocation?.address?.addressLocality || '',
-            salary: item.baseSalary?.value?.value ? `${item.baseSalary?.currency || '₹'} ${item.baseSalary?.value?.value}` : undefined,
-            companyWebsite: item.hiringOrganization?.sameAs || undefined,
-            jobUrl: url,
-            platform,
-            extractedAt: Date.now()
-          };
-        }
+  if (host.includes('linkedin.com')) {
+    // Search details pane (right side)
+    const detailPane = document.querySelector('.jobs-search__job-details, .jobs-details__main-content, .job-view-layout, .jobs-details') || document;
+
+    const titleSelectors = [
+      '.job-details-jobs-unified-top-card__job-title h1',
+      '.job-details-jobs-unified-top-card__job-title',
+      '.jobs-unified-top-card__job-title',
+      '.t-24.job-details-jobs-unified-top-card__job-title',
+      '.jobs-search__job-details h1',
+      '.jobs-search__job-details h2.t-24',
+      'h1.t-24',
+      '.top-card-layout__title'
+    ];
+    for (const sel of titleSelectors) {
+      const el = detailPane.querySelector(sel);
+      const text = el?.textContent?.trim();
+      if (text && text.length > 2 && !isBad(text)) {
+        title = text;
+        break;
       }
     }
-  } catch {
-    // Continue to DOM extraction
+
+    if (!title) {
+      const activeCard = document.querySelector('.jobs-search-results-list__list-item--active, .job-card-container--clickable');
+      if (activeCard) {
+        const cardTitle = activeCard.querySelector('.job-card-list__title, strong, a.job-card-container__link')?.textContent?.trim();
+        if (cardTitle && !isBad(cardTitle)) title = cardTitle;
+      }
+    }
+
+    const companySelectors = [
+      '.job-details-jobs-unified-top-card__company-name a',
+      '.job-details-jobs-unified-top-card__company-name',
+      '.jobs-unified-top-card__company-name a',
+      '.jobs-unified-top-card__company-name',
+      '.jobs-unified-top-card__subtitle-primary-grouping a',
+      '.topcard__org-name-link',
+      '.jobs-search__job-details .app-aware-link'
+    ];
+    for (const sel of companySelectors) {
+      const el = detailPane.querySelector(sel);
+      const text = el?.textContent?.trim();
+      if (text && text.length > 1 && !isBad(text)) {
+        company = text;
+        break;
+      }
+    }
+
+    location = detailPane.querySelector('.job-details-jobs-unified-top-card__bullet, .jobs-unified-top-card__bullet, .topcard__flavor--bullet')?.textContent?.trim() || '';
+    salary = detailPane.querySelector('.job-details-preferences-and-skills, .job-details-jobs-unified-top-card__job-insight--highlight')?.textContent?.trim() || '';
+
+    const descEl = detailPane.querySelector('#job-details, .jobs-description__content, .jobs-description-content__text, .show-more-less-html__markup');
+    description = descEl ? (descEl as HTMLElement).innerText?.trim() : '';
+
+    return {
+      title: title || 'LinkedIn Job',
+      company: company || 'Company on LinkedIn',
+      salary: salary || undefined,
+      location: location || undefined,
+      description: description || document.body.innerText.slice(0, 3000),
+      jobUrl: url,
+      platform: 'linkedin',
+      extractedAt: Date.now()
+    };
   }
 
-  // 2. Platform DOM Extraction
-  if (platform === 'internshala') {
+  if (host.includes('internshala.com')) {
     const modalOrContainer = document.querySelector('.detail_view, .modal-content, .individual_internship, #details_container') || document.body;
 
-    const titleEl = modalOrContainer.querySelector('.profile, .heading_4_5, .job-title-href, h1, .heading_4_5.profile');
-    if (titleEl) title = titleEl.textContent?.trim() || '';
+    const titleEl = modalOrContainer.querySelector('.heading_4_5.profile, .job-title-href, .profile_on_detail_page, .heading_4_5, h1');
+    if (titleEl && !isBad(titleEl.textContent || '')) title = titleEl.textContent?.trim() || '';
 
-    const companyEl = modalOrContainer.querySelector('.company_name, .company-name, .link_display_like_text, .heading_6.company_name');
-    if (companyEl) company = companyEl.textContent?.trim() || '';
+    const companyEl = modalOrContainer.querySelector('.heading_6.company_name a, .heading_6.company_name, .link_display_like_text, .company_name a, .company_name, .company-name');
+    if (companyEl && !isBad(companyEl.textContent || '')) company = companyEl.textContent?.trim() || '';
 
-    const salaryEl = modalOrContainer.querySelector('.stipend, .salary, .desktop-text, .salary_heading + .item_body');
-    if (salaryEl) salary = salaryEl.textContent?.trim() || '';
-
-    const locationEl = modalOrContainer.querySelector('.location_link, #location_names, .locations');
-    if (locationEl) location = locationEl.textContent?.trim() || '';
+    salary = modalOrContainer.querySelector('.stipend, .salary, .desktop-text, .salary_heading + .item_body')?.textContent?.trim() || '';
+    location = modalOrContainer.querySelector('.location_link, #location_names, .locations')?.textContent?.trim() || '';
 
     const descEl = modalOrContainer.querySelector('.text-container, .internship_details, .job_details, .about_job');
-    if (descEl) description = (descEl as HTMLElement).innerText?.trim() || '';
-    if (!description || description.length < 50) {
-      description = (modalOrContainer as HTMLElement).innerText?.slice(0, 3000) || '';
-    }
-  } else if (platform === 'linkedin') {
-    const titleEl = document.querySelector('.job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title, .t-24, h1');
-    if (titleEl) title = titleEl.textContent?.trim() || '';
+    description = descEl ? (descEl as HTMLElement).innerText?.trim() : '';
 
-    const companyEl = document.querySelector('.job-details-jobs-unified-top-card__company-name, .jobs-unified-top-card__company-name, .topcard__org-name-link');
-    if (companyEl) company = companyEl.textContent?.trim() || '';
+    return {
+      title: title || 'Internshala Job',
+      company: company || 'Company on Internshala',
+      salary: salary || undefined,
+      location: location || undefined,
+      description: description || document.body.innerText.slice(0, 3000),
+      jobUrl: url,
+      platform: 'internshala',
+      extractedAt: Date.now()
+    };
+  }
 
-    const descEl = document.querySelector('#job-details, .jobs-description__content, .jobs-description-content__text');
-    if (descEl) description = (descEl as HTMLElement).innerText?.trim() || '';
-  } else if (platform === 'indeed') {
-    const titleEl = document.querySelector('h1.jobsearch-JobInfoHeader-title, [data-testid="jobsearch-JobInfoHeader-title"]');
-    if (titleEl) title = titleEl.textContent?.trim() || '';
-
-    const companyEl = document.querySelector('[data-company-name="true"], .jobsearch-InlineCompanyRating-companyHeader');
-    if (companyEl) company = companyEl.textContent?.trim() || '';
-
+  if (host.includes('indeed.com')) {
+    title = document.querySelector('h1.jobsearch-JobInfoHeader-title, [data-testid="jobsearch-JobInfoHeader-title"]')?.textContent?.trim() || '';
+    company = document.querySelector('[data-company-name="true"], .jobsearch-InlineCompanyRating-companyHeader, .companyOverviewLink')?.textContent?.trim() || '';
+    location = document.querySelector('[data-testid="inlineHeader-companyLocation"], .jobsearch-JobInfoHeader-companyLocation')?.textContent?.trim() || '';
+    salary = document.querySelector('#salaryInfoAndJobType, [data-testid="jobsearch-JobInfoHeader-salary"]')?.textContent?.trim() || '';
     const descEl = document.querySelector('#jobDescriptionText');
-    if (descEl) description = (descEl as HTMLElement).innerText?.trim() || '';
+    description = descEl ? (descEl as HTMLElement).innerText?.trim() : '';
+
+    return {
+      title: title || 'Indeed Job',
+      company: company || 'Company on Indeed',
+      salary: salary || undefined,
+      location: location || undefined,
+      description: description || document.body.innerText.slice(0, 3000),
+      jobUrl: url,
+      platform: 'indeed',
+      extractedAt: Date.now()
+    };
   }
 
-  // Fallback for general pages
-  if (!title) {
-    title = document.querySelector('h1, h2')?.textContent?.trim() || document.title.split('-')[0].split('|')[0].trim();
-  }
-  if (!company) {
-    company = document.querySelector('meta[property="og:site_name"]')?.getAttribute('content') || window.location.hostname.replace('www.', '');
-  }
-  if (!description) {
-    description = document.querySelector('main, article, #content')?.textContent?.trim() || document.body.innerText.slice(0, 3000);
-  }
+  // Fallback
+  title = document.querySelector('h1, h2')?.textContent?.trim() || document.title.split('-')[0].split('|')[0].trim();
+  const ogCompany = document.querySelector('meta[property="og:site_name"]')?.getAttribute('content');
+  company = ogCompany || window.location.hostname.replace('www.', '');
+  description = document.querySelector('main, article, #content')?.textContent?.trim() || document.body.innerText.slice(0, 3000);
 
   const emailMatch = description.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
   if (emailMatch) recruiterEmail = emailMatch[0];
 
   return {
-    title: title || 'Job Posting',
-    company: company || 'Company',
-    salary: salary || undefined,
-    location: location || undefined,
+    title: (!isBad(title) && title.length > 2) ? title : 'Job Opportunity',
+    company: (!isBad(company) && company.length > 1) ? company : 'Company',
+    salary: undefined,
+    location: undefined,
     description: description || '',
     recruiterEmail: recruiterEmail || undefined,
     jobUrl: url,
-    platform,
+    platform: 'other',
     extractedAt: Date.now()
   };
 }
@@ -186,7 +228,7 @@ const SAMPLE_JOBS: { name: string; tag: string; job: JobMetadata }[] = [
       title: 'Online Data Entry Specialist (Direct Selection)',
       company: 'Global Quick Career Hub',
       location: 'Work from Home',
-      salary: '₹85,000 / month (Guaranteed)',
+      salary: '₹85,00,000 / month (Guaranteed)',
       experience: 'No Experience Required',
       recruiterEmail: 'quickhire2026@tempmail.com',
       companyWebsite: '',
@@ -271,7 +313,7 @@ export default function App() {
       if (typeof chrome !== 'undefined' && chrome.storage?.local) {
         chrome.storage.local.set({ activeJob: jobToAnalyze, activeAnalysis: result });
       }
-    }, 300);
+    }, 250);
   };
 
   const handleCustomAnalyze = () => {
@@ -316,6 +358,7 @@ export default function App() {
   // Search URLs for Company Verification
   const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(activeJob.company + ' careers official website')}`;
   const linkedInCompanyUrl = `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(activeJob.company)}`;
+  const ambitionBoxUrl = `https://www.ambitionbox.com/search?q=${encodeURIComponent(activeJob.company)}`;
   const zaubaCorpUrl = `https://www.google.com/search?q=${encodeURIComponent(activeJob.company + ' ZaubaCorp MCA registration')}`;
 
   return (
@@ -345,7 +388,7 @@ export default function App() {
             title="Scan active webpage in real-time"
           >
             <RotateCcw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-            {isScanning ? 'Scanning...' : 'Scan Page'}
+            {isScanning ? 'Scanning...' : 'Scan Job'}
           </button>
           <div
             className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 border ${
@@ -355,7 +398,7 @@ export default function App() {
             }`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${isBackendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-            {isBackendOnline ? 'Cloud AI' : 'Local'}
+            {isBackendOnline ? 'Cloud AI' : 'Active'}
           </div>
         </div>
       </header>
@@ -378,7 +421,7 @@ export default function App() {
           }`}
         >
           <Building2 className="w-3.5 h-3.5" />
-          Verify Company
+          Company Check
         </button>
         <button
           onClick={() => setActiveTab('evidence')}
@@ -401,7 +444,7 @@ export default function App() {
           }`}
         >
           <HelpCircle className="w-3.5 h-3.5" />
-          Safety Check
+          Safety
         </button>
         <button
           onClick={() => setActiveTab('simulator')}
@@ -428,30 +471,30 @@ export default function App() {
         {activeTab === 'overview' && (
           <div className="space-y-3.5 animate-fade-in">
             {/* Live Detected Job Card */}
-            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-start justify-between">
-              <div className="space-y-1 max-w-[260px]">
+            <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-start justify-between shadow-sm">
+              <div className="space-y-1 max-w-[270px]">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                  <span className="text-[10px] uppercase font-extrabold tracking-wider text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/30">
                     {activeJob.platform.toUpperCase()}
                   </span>
                   {activeJob.location && (
-                    <span className="text-[10px] text-slate-400 font-medium truncate">
-                      • {activeJob.location}
+                    <span className="text-[11px] text-slate-400 font-medium truncate">
+                      📍 {activeJob.location}
                     </span>
                   )}
                 </div>
-                <h2 className="text-sm font-bold text-white leading-tight line-clamp-1">
+                <h2 className="text-sm font-extrabold text-white leading-tight line-clamp-1">
                   {activeJob.title}
                 </h2>
-                <p className="text-xs text-slate-300 font-medium line-clamp-1">
-                  🏢 {activeJob.company} {activeJob.salary && `• 💰 ${activeJob.salary}`}
+                <p className="text-xs font-semibold text-emerald-300 line-clamp-1 flex items-center gap-1">
+                  🏢 {activeJob.company} {activeJob.salary && <span className="text-slate-400 font-normal">({activeJob.salary})</span>}
                 </p>
               </div>
               <button
                 onClick={scanActiveTabDirectly}
                 disabled={isScanning}
                 className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-                title="Re-scan page"
+                title="Re-scan current job"
               >
                 <RotateCcw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-emerald-400' : ''}`} />
               </button>
@@ -546,7 +589,7 @@ export default function App() {
                 <div className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800/80 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                      <Globe className="w-3 h-3 text-slate-400" /> Portal / ATS
+                      <Globe className="w-3.5 h-3.5 text-slate-400" /> Portal / ATS
                     </span>
                     {analysis.healthCheck.officialListing.status === 'safe' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
                     {analysis.healthCheck.officialListing.status === 'neutral' && <span className="text-[10px] text-slate-400">Web</span>}
@@ -571,17 +614,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* AI Advisor Guidance Box */}
-            <div className="p-3 rounded-xl bg-gradient-to-r from-slate-900 to-slate-800/90 border border-slate-700/60 space-y-1.5">
-              <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-bold">
-                <Sparkles className="w-3.5 h-3.5" />
-                Candidate Safety Advice
-              </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                "{analysis.aiGuidance}"
-              </p>
-            </div>
-
             {/* Actions */}
             <div className="flex items-center gap-2 pt-1">
               <button
@@ -589,7 +621,7 @@ export default function App() {
                 className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm"
               >
                 <Building2 className="w-3.5 h-3.5" />
-                Verify Company ({activeJob.company.slice(0, 14)})
+                Check {activeJob.company.slice(0, 16)}
               </button>
               <button
                 onClick={() => setActiveTab('report')}
@@ -602,28 +634,28 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: COMPANY VERIFICATION (Real-World Check) */}
+        {/* TAB 2: COMPANY VERIFICATION */}
         {activeTab === 'verify' && (
           <div className="space-y-3.5 animate-fade-in">
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-                Company Legitimacy Verification
+                Employer Intelligence & Verification
               </h3>
               <p className="text-[11px] text-slate-400">
-                Cross-verify <strong>{activeJob.company}</strong> across official sources:
+                Cross-verify <strong>{activeJob.company}</strong> across trusted databases:
               </p>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
-              <div className="space-y-1">
-                <span className="text-[10px] text-slate-500 font-semibold uppercase">Target Employer</span>
-                <h4 className="text-sm font-bold text-white">{activeJob.company}</h4>
-                <p className="text-[11px] text-slate-400">Role: {activeJob.title}</p>
+            <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2.5">
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Target Company</span>
+                <h4 className="text-base font-extrabold text-white">{activeJob.company}</h4>
+                <p className="text-[11px] text-slate-300">Opening: {activeJob.title}</p>
+                {activeJob.location && <p className="text-[11px] text-slate-400">Location: {activeJob.location}</p>}
               </div>
 
               <div className="space-y-2 pt-2 border-t border-slate-800">
-                {/* Official Careers Search */}
                 <a
                   href={googleSearchUrl}
                   target="_blank"
@@ -632,12 +664,11 @@ export default function App() {
                 >
                   <span className="flex items-center gap-2">
                     <Globe className="w-3.5 h-3.5 text-emerald-400" />
-                    Find Official Website & Careers
+                    Find Official Website & Careers Page
                   </span>
                   <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-400" />
                 </a>
 
-                {/* LinkedIn Company Search */}
                 <a
                   href={linkedInCompanyUrl}
                   target="_blank"
@@ -646,12 +677,24 @@ export default function App() {
                 >
                   <span className="flex items-center gap-2">
                     <Search className="w-3.5 h-3.5 text-sky-400" />
-                    Verify LinkedIn Corporate Page
+                    Verify LinkedIn Company Page & Employees
                   </span>
                   <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400" />
                 </a>
 
-                {/* MCA / RoC Legal Registration Search */}
+                <a
+                  href={ambitionBoxUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 flex items-center justify-between transition group border border-slate-700"
+                >
+                  <span className="flex items-center gap-2">
+                    <Building2 className="w-3.5 h-3.5 text-violet-400" />
+                    Read AmbitionBox / Employee Reviews
+                  </span>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-violet-400" />
+                </a>
+
                 <a
                   href={zaubaCorpUrl}
                   target="_blank"
@@ -660,7 +703,7 @@ export default function App() {
                 >
                   <span className="flex items-center gap-2">
                     <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                    Check MCA / Government Registration
+                    Check MCA / Legal Entity Registration
                   </span>
                   <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-400" />
                 </a>
@@ -669,10 +712,12 @@ export default function App() {
 
             <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-slate-300 space-y-1">
               <strong className="text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Verification Rule of Thumb:
+                <CheckCircle2 className="w-3.5 h-3.5" /> Verification Checklist:
               </strong>
               <p className="text-[11px] leading-relaxed text-slate-300">
-                If the company cannot be found on Google, LinkedIn, or ZaubaCorp/MCA, treat the offer with high caution before submitting personal identity documents.
+                1. Does the company have a verified LinkedIn profile with active employees?
+                <br />
+                2. Does this exact role exist on their official careers page?
               </p>
             </div>
 
@@ -685,7 +730,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: EVIDENCE & SIGNALS */}
+        {/* TAB 3: EVIDENCE */}
         {activeTab === 'evidence' && (
           <div className="space-y-3 animate-fade-in">
             <div className="flex items-center justify-between">
@@ -693,7 +738,7 @@ export default function App() {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
                   Risk Signal Matrix ({analysis.signals.length})
                 </h3>
-                <p className="text-[11px] text-slate-400">Exact factors influencing score</p>
+                <p className="text-[11px] text-slate-400">Factors influencing the score</p>
               </div>
               <span className="text-xs font-extrabold text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
                 Score: {analysis.riskScore}/100
@@ -765,7 +810,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 4: SAFETY CHECKLIST */}
+        {/* TAB 4: SAFETY */}
         {activeTab === 'checklist' && (
           <div className="space-y-3 animate-fade-in">
             <div>
