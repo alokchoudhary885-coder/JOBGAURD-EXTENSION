@@ -34,10 +34,11 @@ function extractJobDirectlyFromPage(): JobMetadata {
   const BLACKLIST = [
     'notification', 'notifications', '1 notification', 'messaging', 'my network',
     'home', 'jobs', 'search', 'describe the job you want', 'feed', 'internshala',
-    'linkedin', 'indeed', 'sign in', 'login', 'apply now', 'easy apply'
+    'linkedin', 'indeed', 'sign in', 'login', 'apply now', 'easy apply', 'linkedin job', 'company on linkedin'
   ];
 
   function isBad(t: string): boolean {
+    if (!t) return true;
     const c = t.toLowerCase().trim();
     return BLACKLIST.some(b => c === b || c.startsWith(b));
   }
@@ -50,10 +51,11 @@ function extractJobDirectlyFromPage(): JobMetadata {
   let recruiterEmail = '';
 
   if (host.includes('linkedin.com')) {
-    // Search details pane (right side)
-    const detailPane = document.querySelector('.jobs-search__job-details, .jobs-details__main-content, .job-view-layout, .jobs-details') || document;
+    const detailPane = document.querySelector('.jobs-search__job-details, .jobs-details__main-content, .job-view-layout, .jobs-details, .job-view-layout-wrapper') || document;
 
     const titleSelectors = [
+      'h1.top-card-layout__title',
+      'h1.topcard__title',
       '.job-details-jobs-unified-top-card__job-title h1',
       '.job-details-jobs-unified-top-card__job-title',
       '.jobs-unified-top-card__job-title',
@@ -61,7 +63,8 @@ function extractJobDirectlyFromPage(): JobMetadata {
       '.jobs-search__job-details h1',
       '.jobs-search__job-details h2.t-24',
       'h1.t-24',
-      '.top-card-layout__title'
+      '.top-card-layout__title',
+      'h1'
     ];
     for (const sel of titleSelectors) {
       const el = detailPane.querySelector(sel);
@@ -72,21 +75,16 @@ function extractJobDirectlyFromPage(): JobMetadata {
       }
     }
 
-    if (!title) {
-      const activeCard = document.querySelector('.jobs-search-results-list__list-item--active, .job-card-container--clickable');
-      if (activeCard) {
-        const cardTitle = activeCard.querySelector('.job-card-list__title, strong, a.job-card-container__link')?.textContent?.trim();
-        if (cardTitle && !isBad(cardTitle)) title = cardTitle;
-      }
-    }
-
     const companySelectors = [
+      'a[href*="/company/"]',
+      '.topcard__org-name-link',
+      '.top-card-layout__first-subline a',
+      '.top-card-layout__first-subline',
       '.job-details-jobs-unified-top-card__company-name a',
       '.job-details-jobs-unified-top-card__company-name',
       '.jobs-unified-top-card__company-name a',
       '.jobs-unified-top-card__company-name',
       '.jobs-unified-top-card__subtitle-primary-grouping a',
-      '.topcard__org-name-link',
       '.jobs-search__job-details .app-aware-link'
     ];
     for (const sel of companySelectors) {
@@ -98,18 +96,34 @@ function extractJobDirectlyFromPage(): JobMetadata {
       }
     }
 
-    location = detailPane.querySelector('.job-details-jobs-unified-top-card__bullet, .jobs-unified-top-card__bullet, .topcard__flavor--bullet')?.textContent?.trim() || '';
-    salary = detailPane.querySelector('.job-details-preferences-and-skills, .job-details-jobs-unified-top-card__job-insight--highlight')?.textContent?.trim() || '';
+    // Document Title Fallback (e.g. "Backend Developer - Cynbit Technologies | LinkedIn")
+    if ((!title || !company || isBad(title) || isBad(company)) && document.title.includes('LinkedIn')) {
+      const cleanDocTitle = document.title.replace(/\([0-9]+\)/g, '').trim();
+      const parts = cleanDocTitle.split(/[-|–•]/);
+      if (parts.length >= 2) {
+        if (!title || isBad(title)) title = parts[0].trim();
+        if (!company || isBad(company)) {
+          const potentialComp = parts[1].replace(/at /i, '').replace(/hiring/i, '').trim();
+          if (potentialComp && !isBad(potentialComp)) company = potentialComp;
+        }
+      }
+    }
 
-    const descEl = detailPane.querySelector('#job-details, .jobs-description__content, .jobs-description-content__text, .show-more-less-html__markup');
-    description = descEl ? (descEl as HTMLElement).innerText?.trim() : '';
+    const locationEl = detailPane.querySelector('.topcard__flavor--bullet, .top-card-layout__second-subline, .job-details-jobs-unified-top-card__bullet, .jobs-unified-top-card__bullet, .topcard__flavor');
+    location = locationEl?.textContent?.trim() || '';
+
+    const salaryEl = detailPane.querySelector('.job-details-preferences-and-skills, .job-details-jobs-unified-top-card__job-insight--highlight, .compensation__salary');
+    salary = salaryEl?.textContent?.trim() || '';
+
+    const descEl = detailPane.querySelector('.show-more-less-html__markup, .description__text, #job-details, .jobs-description__content, .jobs-description-content__text');
+    description = descEl ? (descEl as HTMLElement).innerText?.trim() : document.body.innerText.slice(0, 3000);
 
     return {
-      title: title || 'LinkedIn Job',
-      company: company || 'Company on LinkedIn',
+      title: (!isBad(title) && title.length > 2) ? title : 'Software Developer',
+      company: (!isBad(company) && company.length > 1) ? company : 'Company',
       salary: salary || undefined,
       location: location || undefined,
-      description: description || document.body.innerText.slice(0, 3000),
+      description: description || '',
       jobUrl: url,
       platform: 'linkedin',
       extractedAt: Date.now()
@@ -125,18 +139,26 @@ function extractJobDirectlyFromPage(): JobMetadata {
     const companyEl = modalOrContainer.querySelector('.heading_6.company_name a, .heading_6.company_name, .link_display_like_text, .company_name a, .company_name, .company-name');
     if (companyEl && !isBad(companyEl.textContent || '')) company = companyEl.textContent?.trim() || '';
 
+    if ((!title || !company) && document.title.includes('Internshala')) {
+      const parts = document.title.split(/at|in|\||-/);
+      if (parts.length >= 2) {
+        if (!title) title = parts[0].trim();
+        if (!company) company = parts[1].trim();
+      }
+    }
+
     salary = modalOrContainer.querySelector('.stipend, .salary, .desktop-text, .salary_heading + .item_body')?.textContent?.trim() || '';
     location = modalOrContainer.querySelector('.location_link, #location_names, .locations')?.textContent?.trim() || '';
 
     const descEl = modalOrContainer.querySelector('.text-container, .internship_details, .job_details, .about_job');
-    description = descEl ? (descEl as HTMLElement).innerText?.trim() : '';
+    description = descEl ? (descEl as HTMLElement).innerText?.trim() : document.body.innerText.slice(0, 3000);
 
     return {
-      title: title || 'Internshala Job',
-      company: company || 'Company on Internshala',
+      title: title || 'Internshala Role',
+      company: company || 'Employer',
       salary: salary || undefined,
       location: location || undefined,
-      description: description || document.body.innerText.slice(0, 3000),
+      description: description || '',
       jobUrl: url,
       platform: 'internshala',
       extractedAt: Date.now()
@@ -144,19 +166,19 @@ function extractJobDirectlyFromPage(): JobMetadata {
   }
 
   if (host.includes('indeed.com')) {
-    title = document.querySelector('h1.jobsearch-JobInfoHeader-title, [data-testid="jobsearch-JobInfoHeader-title"]')?.textContent?.trim() || '';
-    company = document.querySelector('[data-company-name="true"], .jobsearch-InlineCompanyRating-companyHeader, .companyOverviewLink')?.textContent?.trim() || '';
+    title = document.querySelector('h1.jobsearch-JobInfoHeader-title, [data-testid="jobsearch-JobInfoHeader-title"], h1')?.textContent?.trim() || '';
+    company = document.querySelector('[data-company-name="true"], .jobsearch-InlineCompanyRating-companyHeader, a[href*="/cmp/"], .companyOverviewLink')?.textContent?.trim() || '';
     location = document.querySelector('[data-testid="inlineHeader-companyLocation"], .jobsearch-JobInfoHeader-companyLocation')?.textContent?.trim() || '';
     salary = document.querySelector('#salaryInfoAndJobType, [data-testid="jobsearch-JobInfoHeader-salary"]')?.textContent?.trim() || '';
     const descEl = document.querySelector('#jobDescriptionText');
-    description = descEl ? (descEl as HTMLElement).innerText?.trim() : '';
+    description = descEl ? (descEl as HTMLElement).innerText?.trim() : document.body.innerText.slice(0, 3000);
 
     return {
-      title: title || 'Indeed Job',
-      company: company || 'Company on Indeed',
+      title: (!isBad(title) && title.length > 2) ? title : 'Indeed Opening',
+      company: (!isBad(company) && company.length > 1) ? company : 'Company',
       salary: salary || undefined,
       location: location || undefined,
-      description: description || document.body.innerText.slice(0, 3000),
+      description: description || '',
       jobUrl: url,
       platform: 'indeed',
       extractedAt: Date.now()
