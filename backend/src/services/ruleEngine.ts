@@ -14,10 +14,14 @@ const REPUTABLE_ATS_DOMAINS = [
   'icims.com', 'taleo.net', 'recruitee.com', 'rippling.com'
 ];
 
+// English + Hindi/Hinglish Urgency Phrases
 const URGENCY_PHRASES = [
   'apply immediately', 'limited seats', 'slots filling fast', 'urgent hiring',
   'urgent requirement', 'immediate joining', 'direct selection', 'limited vacancies',
-  'hurry up', 'apply right now', 'offer letter today', 'instant joining'
+  'hurry up', 'apply right now', 'offer letter today', 'instant joining',
+  // Hindi / Hinglish phrases
+  'turant selection', 'turant joining', 'jaldi apply karein', 'jaldi karein',
+  'limited seats bache hain', 'aaj hi join karein', 'urgent vacancy hai', 'turant offer letter'
 ];
 
 export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
@@ -27,8 +31,8 @@ export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
   const title = (job.title || '').toLowerCase();
   const url = (job.jobUrl || '').toLowerCase();
 
-  // 1. Payment Requests (+35 / +30)
-  const feeMatch = desc.match(/(registration|training|security|processing|documentation|uniform|laptop|software|id\s*card)\s*(fee|deposit|charge|amount|cost|money)|refundable\s*deposit|pay\s*(inr|rs\.?|₹|\$)\s*\d+/i);
+  // 1. Payment Requests (+35 / +30) — English & Hindi/Hinglish coverage
+  const feeMatch = desc.match(/(registration|training|security|processing|documentation|uniform|laptop|software|id\s*card)\s*(fee|deposit|charge|amount|cost|money|paisa|paise|fees)|refundable\s*deposit|pay\s*(inr|rs\.?|₹|\$)\s*\d+|registration\s*ka\s*paisa|security\s*jama\s*karein|training\s*fees\s*dena\s*hoga/i);
   if (feeMatch) {
     signals.push({
       id: 'fee_extortion',
@@ -42,7 +46,7 @@ export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
     calculatedScore += 35;
   }
 
-  const bankDetailMatch = desc.match(/(bank\s*account|upi\s*pin|cvv|debit\s*card|credit\s*card|net\s*banking|otp\s*verification|crypto\s*wallet|send\s*money|transfer\s*funds)/i);
+  const bankDetailMatch = desc.match(/(bank\s*account|upi\s*pin|cvv|debit\s*card|credit\s*card|net\s*banking|otp\s*verification|crypto\s*wallet|send\s*money|transfer\s*funds|khata\s*number|bank\s*detail)/i);
   if (bankDetailMatch) {
     signals.push({
       id: 'sensitive_financial_request',
@@ -98,7 +102,7 @@ export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
     }
   }
 
-  const offPlatformMatch = desc.match(/(whatsapp|telegram|wa\.me|t\.me|telegram\.me|inbox\s*me\s*on\s*whatsapp|contact\s*on\s*whatsapp)/i);
+  const offPlatformMatch = desc.match(/(whatsapp|telegram|wa\.me|t\.me|telegram\.me|inbox\s*me\s*on\s*whatsapp|contact\s*on\s*whatsapp|whatsapp\s*par\s*message\s*karein|telegram\s*group\s*join\s*karein)/i);
   if (offPlatformMatch && !isCorporateEmail) {
     signals.push({
       id: 'off_platform_redirect',
@@ -112,8 +116,8 @@ export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
     calculatedScore += 15;
   }
 
-  // 3. Process & Interview Standards (+10)
-  const noInterviewMatch = desc.match(/(instant\s*offer|no\s*interview(\s*needed)?|direct\s*selection|direct\s*joining\s*without\s*interview|offer\s*letter\s*today|no\s*interview\s*required)/i);
+  // 3. Process & Interview Standards (+10) — English & Hindi/Hinglish coverage
+  const noInterviewMatch = desc.match(/(instant\s*offer|no\s*interview(\s*needed)?|direct\s*selection|direct\s*joining\s*without\s*interview|offer\s*letter\s*today|no\s*interview\s*required|bina\s*interview(\s*ke)?\s*(job|selection|joining)|seedha\s*selection|aaj\s*hi\s*joining|bina\s*kisi\s*interview)/i);
   if (noInterviewMatch) {
     signals.push({
       id: 'no_interview_instant_offer',
@@ -128,8 +132,8 @@ export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
   }
 
   // 4. Compensation & Salary Realism (+15 / +10)
-  const isEntryRole = title.includes('intern') || title.includes('data entry') || title.includes('typing') || title.includes('fresher') || desc.includes('no experience') || desc.includes('freshers can apply');
-  const hasExtravagantPay = desc.match(/(₹\s*[5-9]\d,\d{3}|\$\s*[5-9],\d{3}|80000|90000|100000|150000)\s*(per\s*month|\/month|\/mo)/i) || (job.salary && /(8[0-9],000|9[0-9],000|[1-9][0-9]{5,})/i.test(job.salary));
+  const isEntryRole = title.includes('intern') || title.includes('data entry') || title.includes('typing') || title.includes('fresher') || desc.includes('no experience') || desc.includes('freshers can apply') || desc.includes('bina experience') || desc.includes('ghar baithe');
+  const hasExtravagantPay = desc.match(/(₹\s*[5-9]\d,\d{3}|\$\s*[5-9],\d{3}|80000|90000|100000|150000)\s*(per\s*month|\/month|\/mo|mahina|mahine)/i) || (job.salary && /(8[0-9],000|9[0-9],000|[1-9][0-9]{5,})/i.test(job.salary));
 
   if (isEntryRole && hasExtravagantPay) {
     signals.push({
@@ -144,7 +148,7 @@ export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
     calculatedScore += 15;
   }
 
-  // 5. Urgency & Description Quality (+8 / +5)
+  // 5. Urgency & Description Quality (+8 / +5) — English & Hindi/Hinglish coverage
   let urgencyCount = 0;
   for (const phrase of URGENCY_PHRASES) {
     if (desc.includes(phrase)) urgencyCount++;
@@ -166,13 +170,13 @@ export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
       type: 'description_quality',
       category: 'warning',
       title: 'Artificial Scarcity and Urgency Language',
-      description: 'The job posting exerts aggressive pressure (e.g. "urgent joining", "limited seats") typical of high-turnover lures.',
+      description: 'The job posting exerts aggressive pressure (e.g. "urgent joining", "limited seats", "turant selection") typical of high-turnover lures.',
       impactScore: 8
     });
     calculatedScore += 8;
   }
 
-  const grammarAnomalyMatch = desc.match(/(100%\s*gurantee|earn\s*money\s*fastly|daily\s*payment\s*system|home\s*based\s*typing\s*work|part\s*time\s*online\s*work)/i);
+  const grammarAnomalyMatch = desc.match(/(100%\s*gurantee|earn\s*money\s*fastly|daily\s*payment\s*system|home\s*based\s*typing\s*work|part\s*time\s*online\s*work|ghar\s*baithe\s*(kamayein|paise\s*kamaye|kamaye|job|kaam)|rozana\s*(paise|kamai|kamayein)|bina\s*kisi\s*qualification|typing\s*ka\s*kaam\s*ghar\s*se)/i);
   if (grammarAnomalyMatch) {
     signals.push({
       id: 'spam_language_pattern',
@@ -232,7 +236,7 @@ export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
     confidenceReason = 'Moderate confidence — partial job posting details available.';
   }
 
-  // Health Checks (explicitly typed)
+  // Health Checks
   const healthCheck: HealthCheck = {
     companyWebsite: {
       status: (job.companyWebsite || isAtsUrl) ? 'safe' : 'neutral',
