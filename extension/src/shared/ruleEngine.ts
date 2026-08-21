@@ -131,18 +131,38 @@ export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
     calculatedScore += 10;
   }
 
-  // 4. Compensation & Salary Realism (+15 / +10)
-  const isEntryRole = title.includes('intern') || title.includes('data entry') || title.includes('typing') || title.includes('fresher') || desc.includes('no experience') || desc.includes('freshers can apply') || desc.includes('bina experience') || desc.includes('ghar baithe');
-  const hasExtravagantPay = desc.match(/(₹\s*[5-9]\d,\d{3}|\$\s*[5-9],\d{3}|80000|90000|100000|150000)\s*(per\s*month|\/month|\/mo|mahina|mahine)/i) || (job.salary && /(8[0-9],000|9[0-9],000|[1-9][0-9]{5,})/i.test(job.salary));
+  // 4. Compensation & Salary Realism (+15 / +10) — Scoped exclusively to low-skill / scam-prone roles
+  const isSkilledRole = [
+    'engineer', 'developer', 'software', 'frontend', 'backend', 'full stack',
+    'fullstack', 'devops', 'data scientist', 'machine learning', 'ml engineer',
+    'architect', 'qa engineer', 'security engineer', 'programmer', 'ui/ux', 'designer'
+  ].some(keyword => title.includes(keyword));
 
-  if (isEntryRole && hasExtravagantPay) {
+  const isLowSkillOrScamProne = [
+    'data entry', 'typing', 'form filling', 'survey', 'rating', 'back office',
+    'copy paste', 'home based typing', 'typing ka kaam', 'ghar baithe',
+    'mystery evaluator', 'social media promoter', 'click worker', 'task worker'
+  ].some(k => title.includes(k) || desc.includes(k)) ||
+  desc.includes('no experience') || desc.includes('no qualification') ||
+  desc.includes('bina experience') || desc.includes('bina padhai') ||
+  desc.includes('bina kisi qualification') || desc.includes('bina kisi degree');
+
+  const isUnrealisticPayTarget = isLowSkillOrScamProne && !isSkilledRole;
+
+  const descPayMatch = desc.match(/(₹\s*[5-9]\d,\d{3}|\$\s*[5-9],\d{3}|[5-9]\d,\d{3}|80000|90000|100000|150000)\s*(per\s*month|\/month|\/mo|mahina|mahine)/i);
+  const salaryPayMatch = job.salary ? /(8[0-9],000|9[0-9],000|[1-9][0-9]{5,})/i.test(job.salary) : false;
+  const hasExtravagantPay = Boolean(descPayMatch || salaryPayMatch);
+
+  const isUnrealisticCompensation = isUnrealisticPayTarget && hasExtravagantPay;
+
+  if (isUnrealisticCompensation) {
     signals.push({
       id: 'unrealistic_compensation',
       type: 'compensation',
       category: 'warning',
       title: 'Unrealistic Compensation for Entry-Level Role',
-      description: 'The stated salary is abnormally high for an entry-level or no-experience role, a common lure used in employment phishing.',
-      evidence: job.salary || 'Abnormal pay rate',
+      description: 'The stated salary is abnormally high for a low-qualification or entry-level role, a common lure used in employment phishing.',
+      evidence: job.salary || (descPayMatch ? descPayMatch[0] : 'Abnormal pay rate'),
       impactScore: 15
     });
     calculatedScore += 15;
@@ -251,8 +271,8 @@ export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
       detail: extractedEmail
     },
     salaryRealism: {
-      status: (isEntryRole && hasExtravagantPay) ? 'warning' : 'safe',
-      label: (isEntryRole && hasExtravagantPay) ? 'Unrealistic Band' : (job.salary ? 'Market Standard' : 'Disclosed on Application'),
+      status: isUnrealisticCompensation ? 'warning' : 'safe',
+      label: isUnrealisticCompensation ? 'Unrealistic Band' : (job.salary ? 'Market Standard' : 'Disclosed on Application'),
       detail: job.salary
     },
     communication: {
