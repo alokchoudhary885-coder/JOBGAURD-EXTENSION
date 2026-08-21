@@ -1,12 +1,12 @@
 {
   "name": "jobguard-extension",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "JobGuard - Know the Risk Before You Apply. Chrome Extension for Job Scam & Risk Analysis",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && node build.js",
     "preview": "vite preview"
   },
   "dependencies": {
