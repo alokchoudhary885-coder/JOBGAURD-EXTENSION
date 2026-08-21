@@ -1,24 +1,20 @@
 {
   "manifest_version": 3,
-  "name": "JobGuard — Job Risk & Scam Analyzer",
-  "version": "1.0.0",
-  "description": "Know the risk before you apply. Instantly analyze job postings on LinkedIn, Indeed, Internshala & career sites for scam indicators.",
+  "name": "JobGuard — Know The Risk Before You Apply",
+  "version": "2.0.0",
+  "description": "Deterministic fraud risk analysis and employer verification for LinkedIn, Internshala, Indeed, and online career listings.",
   "permissions": [
     "storage",
-    "tabs",
     "activeTab",
     "scripting"
   ],
   "host_permissions": [
-    "https://*.linkedin.com/*",
-    "https://*.internshala.com/*",
-    "https://*.indeed.com/*",
     "http://localhost:5000/*",
-    "https://*/*"
+    "https://api.jobguard.app/*"
   ],
   "action": {
     "default_popup": "index.html",
-    "default_title": "JobGuard — Know the Risk Before You Apply",
+    "default_title": "JobGuard — Risk Analyzer",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
@@ -38,11 +34,13 @@
       "matches": [
         "https://*.linkedin.com/*",
         "https://*.internshala.com/*",
-        "https://*.indeed.com/*",
-        "https://*/*"
+        "https://*.indeed.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
 }

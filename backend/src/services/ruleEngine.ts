@@ -1,219 +1,287 @@
-import { JobMetadata, AnalysisResult, RiskSignal, HealthCheck, RiskLevel } from '../types';
+import { JobMetadata, AnalysisResult, RiskSignal, RiskLevel, ConfidenceLevel, HealthCheck } from '../types';
+
+export const RULESET_VERSION = '2.0.0';
 
 const FREE_EMAIL_DOMAINS = [
-  'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'rediffmail.com',
-  'yopmail.com', 'tempmail.com', 'mail.ru', 'protonmail.com', 'aol.com',
-  'icloud.com', 'zoho.com', 'gmx.com'
+  'gmail.com', 'yahoo.com', 'yahoo.co.in', 'hotmail.com', 'outlook.com',
+  'rediffmail.com', 'aol.com', 'protonmail.com', 'mailinator.com', 'tempmail.com',
+  'zoho.com', 'yopmail.com', 'gmx.com'
 ];
 
-const KNOWN_ATS_DOMAINS = [
-  'greenhouse.io', 'lever.co', 'workday.com', 'smartrecruiters.com',
-  'ashbyhq.com', 'jobvite.com', 'taleo.net', 'bamboohr.com', 'myworkdayjobs.com'
+const REPUTABLE_ATS_DOMAINS = [
+  'greenhouse.io', 'lever.co', 'workday.com', 'myworkdayjobs.com',
+  'smartrecruiters.com', 'ashbyhq.com', 'jobvite.com', 'bamboohr.com',
+  'icims.com', 'taleo.net', 'recruitee.com', 'rippling.com'
 ];
 
-export function runRuleEngine(job: JobMetadata): { score: number; signals: RiskSignal[]; healthCheck: HealthCheck } {
+const URGENCY_PHRASES = [
+  'apply immediately', 'limited seats', 'slots filling fast', 'urgent hiring',
+  'urgent requirement', 'immediate joining', 'direct selection', 'limited vacancies',
+  'hurry up', 'apply right now', 'offer letter today', 'instant joining'
+];
+
+export function analyzeJobLocally(job: JobMetadata): AnalysisResult {
   const signals: RiskSignal[] = [];
-  let calculatedScore = 5;
+  let calculatedScore = 0;
+  const desc = (job.description || '').toLowerCase();
+  const title = (job.title || '').toLowerCase();
+  const url = (job.jobUrl || '').toLowerCase();
 
-  const fullText = `${job.title} ${job.company} ${job.description} ${job.recruiterEmail || ''} ${job.jobUrl || ''}`.toLowerCase();
-
-  // 1. Recruiter Email
-  let emailStatus: HealthCheck['recruiterEmail']['status'] = 'neutral';
-  let emailLabel = 'Not Disclosed';
-  let emailDetail: string | undefined;
-
-  const emailMatch = fullText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  const detectedEmail = job.recruiterEmail?.toLowerCase() || emailMatch?.[0];
-
-  if (detectedEmail) {
-    const domain = detectedEmail.split('@')[1];
-    const isFree = FREE_EMAIL_DOMAINS.includes(domain);
-
-    if (isFree) {
-      emailStatus = 'warning';
-      emailLabel = `@${domain} (Public Domain)`;
-      emailDetail = `Recruiter uses free email (${detectedEmail})`;
-      calculatedScore += 18;
-      signals.push({
-        id: 'email_free_domain',
-        type: 'email',
-        category: 'warning',
-        title: 'Recruiter Uses Public Email Provider',
-        description: `Legitimate corporations typically recruit through verified domain emails rather than free @${domain} addresses.`,
-        evidence: detectedEmail,
-        impactScore: 18,
-      });
-    } else {
-      emailStatus = 'safe';
-      emailLabel = `@${domain} (Corporate Domain)`;
-      emailDetail = `Official domain: ${detectedEmail}`;
-      calculatedScore -= 12;
-      signals.push({
-        id: 'email_corporate_domain',
-        type: 'email',
-        category: 'positive',
-        title: 'Corporate Email Domain Detected',
-        description: `The posting specifies an official corporate domain email (@${domain}).`,
-        evidence: detectedEmail,
-        impactScore: -12,
-      });
-    }
-  }
-
-  // 2. Upfront Payment Extortion
-  const paymentKeywords = [
-    'registration fee', 'training fee', 'security deposit', 'laptop deposit',
-    'pay inr', 'pay rs', 'processing fee', 'refundable deposit', 'pay ₹',
-    'bank transfer', 'crypto', 'usdt', 'deposit money', 'exam fee', 'kit fee',
-    'advance fee', 'verification charge'
-  ];
-
-  let hasPaymentRequest = false;
-  let paymentEvidence = '';
-
-  for (const kw of paymentKeywords) {
-    if (fullText.includes(kw)) {
-      hasPaymentRequest = true;
-      paymentEvidence = kw;
-      break;
-    }
-  }
-
-  if (hasPaymentRequest) {
-    calculatedScore += 50;
+  // 1. Payment Requests (+35 / +30)
+  const feeMatch = desc.match(/(registration|training|security|processing|documentation|uniform|laptop|software|id\s*card)\s*(fee|deposit|charge|amount|cost|money)|refundable\s*deposit|pay\s*(inr|rs\.?|₹|\$)\s*\d+/i);
+  if (feeMatch) {
     signals.push({
-      id: 'payment_upfront_fee',
+      id: 'fee_extortion',
       type: 'payment',
       category: 'critical',
-      title: 'Upfront Payment or Deposit Mentioned',
-      description: 'Legitimate employers never ask candidates to pay registration fees, security deposits, or training costs as a hiring condition.',
-      evidence: `Contains mention of "${paymentEvidence}"`,
-      impactScore: 50,
+      title: 'Upfront Payment or Deposit Required',
+      description: 'The posting explicitly mentions upfront fees, security deposits, or candidate charges. Legitimate employers never charge candidates.',
+      evidence: feeMatch[0],
+      impactScore: 35
     });
+    calculatedScore += 35;
   }
 
-  // 3. Off-Platform Redirection
-  const offPlatformTriggers = [
-    { pattern: /wa\.me\/[0-9]+/i, name: 'Direct WhatsApp Link' },
-    { pattern: /chat\.whatsapp\.com/i, name: 'WhatsApp Group Invite' },
-    { pattern: /t\.me\/[a-zA-Z0-9_]+/i, name: 'Telegram Channel/Bot' },
-    { pattern: /forms\.gle\/[a-zA-Z0-9]+/i, name: 'Google Forms Redirect' },
-    { pattern: /bit\.ly\/[a-zA-Z0-9]+/i, name: 'Masked Shortlink (bit.ly)' },
-    { pattern: /contact.*whatsapp/i, name: 'WhatsApp Recruitment Prompt' },
-  ];
+  const bankDetailMatch = desc.match(/(bank\s*account|upi\s*pin|cvv|debit\s*card|credit\s*card|net\s*banking|otp\s*verification|crypto\s*wallet|send\s*money|transfer\s*funds)/i);
+  if (bankDetailMatch) {
+    signals.push({
+      id: 'sensitive_financial_request',
+      type: 'payment',
+      category: 'critical',
+      title: 'Premature Financial/Banking Request',
+      description: 'The posting asks for banking details, UPI PIN, or card information prior to formal employment.',
+      evidence: bankDetailMatch[0],
+      impactScore: 30
+    });
+    calculatedScore += 30;
+  }
 
-  let communicationStatus: HealthCheck['communication']['status'] = 'safe';
-  let communicationLabel = 'Standard Portal Application';
-  let commEvidence: string | undefined;
+  // 2. Contact Channels (+15 / +15)
+  let extractedEmail = job.recruiterEmail;
+  if (!extractedEmail) {
+    const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
+    const match = job.description.match(emailRegex);
+    if (match) extractedEmail = match[1];
+  }
 
-  for (const trigger of offPlatformTriggers) {
-    const match = fullText.match(trigger.pattern);
-    if (match) {
-      communicationStatus = 'warning';
-      communicationLabel = trigger.name;
-      commEvidence = match[0];
-      calculatedScore += 25;
-      signals.push({
-        id: 'off_platform_redirect',
-        type: 'off_platform',
-        category: 'warning',
-        title: `Off-Platform Communication (${trigger.name})`,
-        description: 'Scammers frequently attempt to move job seekers off verified platforms onto encrypted chat apps before soliciting funds or sensitive documents.',
-        evidence: match[0],
-        impactScore: 25,
-      });
-      break;
+  let isFreeEmail = false;
+  let isCorporateEmail = false;
+
+  if (extractedEmail) {
+    const domain = extractedEmail.split('@')[1]?.toLowerCase();
+    if (domain) {
+      if (FREE_EMAIL_DOMAINS.includes(domain)) {
+        isFreeEmail = true;
+        signals.push({
+          id: 'free_email_domain',
+          type: 'contact_channel',
+          category: 'warning',
+          title: 'Public Email Domain Used for Official Hiring',
+          description: `The recruiter uses a free webmail service (@${domain}) instead of an official corporate domain.`,
+          evidence: extractedEmail,
+          impactScore: 15
+        });
+        calculatedScore += 15;
+      } else {
+        isCorporateEmail = true;
+        signals.push({
+          id: 'corporate_email_domain',
+          type: 'contact_channel',
+          category: 'positive',
+          title: 'Corporate Email Domain Detected',
+          description: `The recruiter uses an authentic domain (@${domain}).`,
+          evidence: extractedEmail,
+          impactScore: -10
+        });
+        calculatedScore -= 10;
+      }
     }
   }
 
-  // 4. Unrealistic Salary / Zero Skill Traps
-  let salaryStatus: HealthCheck['salaryRealism']['status'] = 'safe';
-  let salaryLabel = 'Market Realistic';
-
-  const unrealisticSalaryPatterns = [
-    /earn.*(50,?000|1,?00,?000|lakh).*per.*(day|week|month).*no.*skill/i,
-    /no.*interview.*direct.*selection/i,
-    /earn.*daily.*part.*time.*simple.*typing/i,
-    /data.*entry.*50000.*per.*month/i
-  ];
-
-  for (const pattern of unrealisticSalaryPatterns) {
-    const match = fullText.match(pattern);
-    if (match) {
-      salaryStatus = 'warning';
-      salaryLabel = 'Abnormally High for Role';
-      calculatedScore += 20;
-      signals.push({
-        id: 'unrealistic_compensation',
-        type: 'salary',
-        category: 'warning',
-        title: 'Unrealistic Compensation / Zero Skill Claim',
-        description: 'High compensation paired with promises of "no skills required" or "direct selection without interview" is a classic indicator of bait-and-switch scams.',
-        evidence: match[0],
-        impactScore: 20,
-      });
-      break;
-    }
-  }
-
-  // 5. Official ATS
-  const isATS = KNOWN_ATS_DOMAINS.some(ats => (job.jobUrl || '').includes(ats));
-  if (isATS) {
-    calculatedScore -= 15;
+  const offPlatformMatch = desc.match(/(whatsapp|telegram|wa\.me|t\.me|telegram\.me|inbox\s*me\s*on\s*whatsapp|contact\s*on\s*whatsapp)/i);
+  if (offPlatformMatch && !isCorporateEmail) {
     signals.push({
-      id: 'verified_ats_host',
-      type: 'domain',
-      category: 'positive',
-      title: 'Hosted on Enterprise Recruitment Platform',
-      description: 'The job posting URL originates from a recognized enterprise applicant tracking system (ATS).',
-      evidence: job.jobUrl,
-      impactScore: -15,
+      id: 'off_platform_redirect',
+      type: 'contact_channel',
+      category: 'warning',
+      title: 'Off-Platform Messaging Recruitment',
+      description: 'Candidates are directed to conduct the hiring process over personal chat apps (WhatsApp/Telegram) without corporate email verification.',
+      evidence: offPlatformMatch[0],
+      impactScore: 15
     });
+    calculatedScore += 15;
   }
 
-  // 6. Comprehensive JD
-  if (job.description && job.description.length > 800) {
-    calculatedScore -= 8;
+  // 3. Process & Interview Standards (+10)
+  const noInterviewMatch = desc.match(/(instant\s*offer|no\s*interview(\s*needed)?|direct\s*selection|direct\s*joining\s*without\s*interview|offer\s*letter\s*today|no\s*interview\s*required)/i);
+  if (noInterviewMatch) {
     signals.push({
-      id: 'comprehensive_description',
-      type: 'official_match',
-      category: 'positive',
-      title: 'Detailed Role Description & Requirements',
-      description: 'The posting contains structured requirements, specific responsibilities, and clear role expectations.',
-      impactScore: -8,
+      id: 'no_interview_instant_offer',
+      type: 'process',
+      category: 'warning',
+      title: 'Direct Hiring Without Valid Interview Process',
+      description: 'The posting promises instant selection or offer letters without standard technical screening or structured interviews.',
+      evidence: noInterviewMatch[0],
+      impactScore: 10
     });
+    calculatedScore += 10;
   }
 
+  // 4. Compensation & Salary Realism (+15 / +10)
+  const isEntryRole = title.includes('intern') || title.includes('data entry') || title.includes('typing') || title.includes('fresher') || desc.includes('no experience') || desc.includes('freshers can apply');
+  const hasExtravagantPay = desc.match(/(₹\s*[5-9]\d,\d{3}|\$\s*[5-9],\d{3}|80000|90000|100000|150000)\s*(per\s*month|\/month|\/mo)/i) || (job.salary && /(8[0-9],000|9[0-9],000|[1-9][0-9]{5,})/i.test(job.salary));
+
+  if (isEntryRole && hasExtravagantPay) {
+    signals.push({
+      id: 'unrealistic_compensation',
+      type: 'compensation',
+      category: 'warning',
+      title: 'Unrealistic Compensation for Entry-Level Role',
+      description: 'The stated salary is abnormally high for an entry-level or no-experience role, a common lure used in employment phishing.',
+      evidence: job.salary || 'Abnormal pay rate',
+      impactScore: 15
+    });
+    calculatedScore += 15;
+  }
+
+  // 5. Urgency & Description Quality (+8 / +5)
+  let urgencyCount = 0;
+  for (const phrase of URGENCY_PHRASES) {
+    if (desc.includes(phrase)) urgencyCount++;
+  }
+
+  if (!job.salary && urgencyCount > 0) {
+    signals.push({
+      id: 'no_salary_high_urgency',
+      type: 'compensation',
+      category: 'warning',
+      title: 'Missing Salary with High Urgency Pressure',
+      description: 'Compensation details are withheld while exerting urgency on applicants to register immediately.',
+      impactScore: 10
+    });
+    calculatedScore += 10;
+  } else if (urgencyCount >= 2) {
+    signals.push({
+      id: 'high_urgency_density',
+      type: 'description_quality',
+      category: 'warning',
+      title: 'Artificial Scarcity and Urgency Language',
+      description: 'The job posting exerts aggressive pressure (e.g. "urgent joining", "limited seats") typical of high-turnover lures.',
+      impactScore: 8
+    });
+    calculatedScore += 8;
+  }
+
+  const grammarAnomalyMatch = desc.match(/(100%\s*gurantee|earn\s*money\s*fastly|daily\s*payment\s*system|home\s*based\s*typing\s*work|part\s*time\s*online\s*work)/i);
+  if (grammarAnomalyMatch) {
+    signals.push({
+      id: 'spam_language_pattern',
+      type: 'description_quality',
+      category: 'warning',
+      title: 'Generic Spam Language Pattern Detected',
+      description: 'Phrasing matches common mass-posted freelance or data-entry recruitment templates.',
+      evidence: grammarAnomalyMatch[0],
+      impactScore: 5
+    });
+    calculatedScore += 5;
+  }
+
+  // 6. Company Verification & Domain Match (+15 / -10)
+  const isAtsUrl = REPUTABLE_ATS_DOMAINS.some(ats => url.includes(ats));
+  if (isAtsUrl || (job.isJsonLd && job.companyWebsite && !isFreeEmail)) {
+    signals.push({
+      id: 'verified_ats_portal',
+      type: 'company_verification',
+      category: 'positive',
+      title: 'Enterprise ATS / Verified Schema Posting',
+      description: 'This position is hosted on a verified applicant tracking system or complete Schema.org job posting.',
+      impactScore: -10
+    });
+    calculatedScore -= 10;
+  } else if (!job.companyWebsite && !job.isJsonLd && !isCorporateEmail) {
+    signals.push({
+      id: 'unverified_company_website',
+      type: 'company_verification',
+      category: 'warning',
+      title: 'Unverified Corporate Presence',
+      description: 'No verified official careers page or structured schema could be automatically confirmed.',
+      impactScore: 15
+    });
+    calculatedScore += 15;
+  }
+
+  // Score clamping (0 to 100)
+  const finalScore = Math.max(0, Math.min(100, calculatedScore));
+
+  // Risk Band
+  let riskLevel: RiskLevel = 'LOW';
+  if (finalScore >= 76) riskLevel = 'CRITICAL';
+  else if (finalScore >= 51) riskLevel = 'HIGH';
+  else if (finalScore >= 26) riskLevel = 'MEDIUM';
+
+  // Confidence Level Determination
+  let confidence: ConfidenceLevel = 'HIGH';
+  let confidenceReason: string | undefined;
+
+  const descLen = job.description ? job.description.trim().length : 0;
+  if (descLen < 50) {
+    confidence = 'LOW';
+    confidenceReason = 'Low confidence — insufficient description text extracted to perform a complete assessment.';
+  } else if (descLen < 150) {
+    confidence = 'MEDIUM';
+    confidenceReason = 'Moderate confidence — partial job posting details available.';
+  }
+
+  // Health Checks (explicitly typed)
   const healthCheck: HealthCheck = {
     companyWebsite: {
-      status: job.companyWebsite ? 'safe' : 'neutral',
-      label: job.companyWebsite ? 'Website Linked' : 'Standard Web Portal',
+      status: (job.companyWebsite || isAtsUrl) ? 'safe' : 'neutral',
+      label: isAtsUrl ? 'Enterprise ATS Verified' : (job.companyWebsite ? 'Verified Domain' : 'Standard Web Portal'),
       detail: job.companyWebsite || job.company
     },
     recruiterEmail: {
-      status: emailStatus,
-      label: emailLabel,
-      detail: emailDetail
+      status: isCorporateEmail ? 'safe' : (isFreeEmail ? 'warning' : 'neutral'),
+      label: isCorporateEmail
+        ? `${extractedEmail?.split('@')[1]} (Corporate)`
+        : (isFreeEmail ? `${extractedEmail?.split('@')[1]} (Public Webmail)` : 'Not Disclosed'),
+      detail: extractedEmail
     },
     salaryRealism: {
-      status: salaryStatus,
-      label: salaryLabel,
-      detail: job.salary || 'Standard band'
+      status: (isEntryRole && hasExtravagantPay) ? 'warning' : 'safe',
+      label: (isEntryRole && hasExtravagantPay) ? 'Unrealistic Band' : (job.salary ? 'Market Standard' : 'Disclosed on Application'),
+      detail: job.salary
     },
     communication: {
-      status: communicationStatus,
-      label: communicationLabel,
-      detail: commEvidence
+      status: (offPlatformMatch && !isCorporateEmail) ? 'warning' : 'safe',
+      label: (offPlatformMatch && !isCorporateEmail) ? 'WhatsApp / Off-Platform' : 'Standard Portal Application'
     },
     officialListing: {
-      status: isATS ? 'safe' : 'neutral',
-      label: isATS ? 'Verified Enterprise ATS' : 'Standard Web Listing'
+      status: (isAtsUrl || job.isJsonLd) ? 'safe' : 'neutral',
+      label: isAtsUrl ? 'Enterprise Job Board' : (job.isJsonLd ? 'Verified Schema.org' : 'Standard Web Posting')
     }
   };
 
+  // Summary
+  let summary = 'Standard hiring patterns detected. No critical anomalies identified.';
+  if (riskLevel === 'CRITICAL') {
+    summary = 'Critical risk detected! Posting exhibits high-confidence fraud or fee extortion markers.';
+  } else if (riskLevel === 'HIGH') {
+    summary = 'High caution advised: Multiple suspicious recruitment anomalies identified.';
+  } else if (riskLevel === 'MEDIUM') {
+    summary = 'Moderate risk: Unverified contact channels or unconfirmed corporate presence detected.';
+  }
+
   return {
-    score: Math.max(0, Math.min(100, Math.round(calculatedScore))),
+    riskScore: finalScore,
+    riskLevel,
+    confidence,
+    confidenceReason,
+    rulesetVersion: RULESET_VERSION,
+    summary,
     signals,
-    healthCheck
+    healthCheck,
+    analyzedAt: Date.now(),
+    job,
+    communityReportsCount: 0
   };
 }

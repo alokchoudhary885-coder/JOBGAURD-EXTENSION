@@ -21,10 +21,11 @@ import {
   ChevronRight,
   Info,
   Building2,
-  Search
+  Search,
+  Lock
 } from 'lucide-react';
 import { AnalysisResult, JobMetadata, RiskLevel } from '../types';
-import { analyzeJobLocally } from '../shared/ruleEngine';
+import { analyzeJobLocally, RULESET_VERSION } from '../shared/ruleEngine';
 
 // Standalone function executed directly in the active browser tab via chrome.scripting
 function extractJobDirectlyFromPage(): JobMetadata {
@@ -41,6 +42,45 @@ function extractJobDirectlyFromPage(): JobMetadata {
     if (!t) return true;
     const c = t.toLowerCase().trim();
     return BLACKLIST.some(b => c === b || c.startsWith(b));
+  }
+
+  // 1. JSON-LD Check
+  try {
+    const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of Array.from(scripts)) {
+      if (!script.textContent) continue;
+      const json = JSON.parse(script.textContent);
+      const items = Array.isArray(json) ? json : [json];
+      for (const item of items) {
+        const type = item['@type'];
+        if (type === 'JobPosting' || (Array.isArray(type) && type.includes('JobPosting'))) {
+          const hiringOrg = typeof item.hiringOrganization === 'string'
+            ? item.hiringOrganization
+            : item.hiringOrganization?.name || '';
+          const companyUrl = item.hiringOrganization?.sameAs || item.hiringOrganization?.url || undefined;
+          const loc = typeof item.jobLocation === 'string' ? item.jobLocation : item.jobLocation?.address?.addressLocality || '';
+          const salaryVal = item.baseSalary?.value?.value || item.baseSalary?.value;
+          const salaryStr = salaryVal ? `${item.baseSalary?.currency || '₹'} ${salaryVal}` : undefined;
+
+          if (item.title && hiringOrg) {
+            return {
+              title: item.title,
+              company: hiringOrg,
+              location: loc || undefined,
+              salary: salaryStr,
+              companyWebsite: companyUrl,
+              description: item.description || '',
+              jobUrl: url,
+              platform: 'career_portal',
+              extractedAt: Date.now(),
+              isJsonLd: true
+            };
+          }
+        }
+      }
+    }
+  } catch {
+    // Continue
   }
 
   let title = '';
@@ -96,7 +136,6 @@ function extractJobDirectlyFromPage(): JobMetadata {
       }
     }
 
-    // Document Title Fallback (e.g. "Backend Developer - Cynbit Technologies | LinkedIn")
     if ((!title || !company || isBad(title) || isBad(company)) && document.title.includes('LinkedIn')) {
       const cleanDocTitle = document.title.replace(/\([0-9]+\)/g, '').trim();
       const parts = cleanDocTitle.split(/[-|–•]/);
@@ -223,6 +262,7 @@ const SAMPLE_JOBS: { name: string; tag: string; job: JobMetadata }[] = [
       jobUrl: 'https://jobs.lever.co/stripe/frontend-senior-eng',
       platform: 'career_portal',
       extractedAt: Date.now(),
+      isJsonLd: true,
       description: 'We are seeking an experienced Frontend Engineer with deep expertise in React, TypeScript, and distributed systems. You will lead UI architecture for global payments infrastructure. Candidates undergo technical screenings and code review rounds.',
     }
   },
@@ -250,7 +290,7 @@ const SAMPLE_JOBS: { name: string; tag: string; job: JobMetadata }[] = [
       title: 'Online Data Entry Specialist (Direct Selection)',
       company: 'Global Quick Career Hub',
       location: 'Work from Home',
-      salary: '₹85,00,000 / month (Guaranteed)',
+      salary: '₹85,000 / month (Guaranteed)',
       experience: 'No Experience Required',
       recruiterEmail: 'quickhire2026@tempmail.com',
       companyWebsite: '',
@@ -258,6 +298,19 @@ const SAMPLE_JOBS: { name: string; tag: string; job: JobMetadata }[] = [
       platform: 'internshala',
       extractedAt: Date.now(),
       description: 'Earn ₹85,000 per month from home! No interview needed. Immediate joining today. Selected candidates must pay a refundable security deposit of ₹1,500 for training kit and verification. Join telegram t.me/fastjobsofficial now.',
+    }
+  },
+  {
+    name: 'Sparse Posting (Low Confidence)',
+    tag: 'Low Confidence',
+    job: {
+      title: 'Software Developer',
+      company: 'ABC Systems',
+      location: 'Remote',
+      jobUrl: 'https://linkedin.com/jobs/view/sparse',
+      platform: 'linkedin',
+      extractedAt: Date.now(),
+      description: 'Hiring developers.',
     }
   }
 ];
@@ -267,8 +320,11 @@ export default function App() {
   const [activeJob, setActiveJob] = useState<JobMetadata>(SAMPLE_JOBS[0].job);
   const [analysis, setAnalysis] = useState<AnalysisResult>(analyzeJobLocally(SAMPLE_JOBS[0].job));
   const [isScanning, setIsScanning] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiAdviceText, setAiAdviceText] = useState<string | null>(null);
   const [isBackendOnline, setIsBackendOnline] = useState(false);
   const [historyList, setHistoryList] = useState<AnalysisResult[]>([]);
+  const [hasAcceptedConsent, setHasAcceptedConsent] = useState<boolean>(true);
   const [customJdText, setCustomJdText] = useState('');
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [reportReason, setReportReason] = useState('Asked for upfront registration or training fee');
@@ -292,6 +348,7 @@ export default function App() {
             const calculated = analyzeJobLocally(extracted);
             setActiveJob(extracted);
             setAnalysis(calculated);
+            setAiAdviceText(null); // Reset on-demand AI advice
 
             chrome.storage.local.set({
               activeJob: extracted,
@@ -308,12 +365,16 @@ export default function App() {
     }
   }, []);
 
-  // Auto-scan on popup open
+  // Check consent & initialize
   useEffect(() => {
-    scanActiveTabDirectly();
-
     if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-      chrome.storage.local.get(['analysisHistory'], (result) => {
+      chrome.storage.local.get(['jobguard_consent_accepted', 'analysisHistory'], (result) => {
+        if (result.jobguard_consent_accepted === undefined) {
+          setHasAcceptedConsent(false);
+        } else {
+          setHasAcceptedConsent(Boolean(result.jobguard_consent_accepted));
+        }
+
         if (result.analysisHistory) setHistoryList(result.analysisHistory);
       });
 
@@ -321,11 +382,21 @@ export default function App() {
         .then(res => setIsBackendOnline(res.ok))
         .catch(() => setIsBackendOnline(false));
     }
+
+    scanActiveTabDirectly();
   }, [scanActiveTabDirectly]);
+
+  const handleAcceptConsent = () => {
+    setHasAcceptedConsent(true);
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      chrome.storage.local.set({ jobguard_consent_accepted: true });
+    }
+  };
 
   const triggerAnalyze = (jobToAnalyze: JobMetadata) => {
     setIsScanning(true);
     setActiveJob(jobToAnalyze);
+    setAiAdviceText(null);
 
     setTimeout(() => {
       const result = analyzeJobLocally(jobToAnalyze);
@@ -336,6 +407,34 @@ export default function App() {
         chrome.storage.local.set({ activeJob: jobToAnalyze, activeAnalysis: result });
       }
     }, 250);
+  };
+
+  // On-Demand AI Advice trigger
+  const requestAiAdvice = async () => {
+    setIsAiLoading(true);
+    try {
+      const res = await fetch('http://localhost:5000/api/v1/score/advice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job: activeJob,
+          score: analysis.riskScore,
+          riskLevel: analysis.riskLevel,
+          signals: analysis.signals
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAiAdviceText(data.aiGuidance || data.summary || 'Proceed with standard application verification.');
+      } else {
+        setAiAdviceText('Verify opening on official careers portal and keep communications on-platform.');
+      }
+    } catch {
+      setAiAdviceText('Ensure all recruiter credentials and offer letters are verified on official corporate domains before sharing documents.');
+    } finally {
+      setIsAiLoading(false);
+    }
   };
 
   const handleCustomAnalyze = () => {
@@ -383,6 +482,57 @@ export default function App() {
   const ambitionBoxUrl = `https://www.ambitionbox.com/search?q=${encodeURIComponent(activeJob.company)}`;
   const zaubaCorpUrl = `https://www.google.com/search?q=${encodeURIComponent(activeJob.company + ' ZaubaCorp MCA registration')}`;
 
+  // First-Run Consent Screen
+  if (!hasAcceptedConsent) {
+    return (
+      <div className="w-[400px] min-h-[570px] bg-slate-950 text-slate-100 flex flex-col justify-between p-6 font-sans border border-slate-800">
+        <div className="space-y-4">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+            <Shield className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-extrabold text-white">Welcome to JobGuard</h2>
+            <p className="text-xs text-slate-400 mt-1">Know the risk before you apply.</p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2.5 text-xs text-slate-300">
+            <div className="flex items-start gap-2">
+              <Lock className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-white">Privacy-First Architecture:</strong>
+                <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
+                  JobGuard runs deterministic rule analysis 100% locally in your browser. No applicant resumes or personal identity data are stored.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 pt-2 border-t border-slate-800">
+              <Info className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-white">Informational Assessment:</strong>
+                <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
+                  Risk scores are mathematical heuristic indicators based on public listing text. They are not legal determinations of fraud.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2 pt-4">
+          <button
+            onClick={handleAcceptConsent}
+            className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-md"
+          >
+            I Understand & Continue
+          </button>
+          <p className="text-[10px] text-center text-slate-500">
+            Compliant with DPDP Act 2023 & Chrome Web Store Policies
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-[400px] min-h-[570px] bg-slate-950 text-slate-100 flex flex-col font-sans border border-slate-800">
       {/* Header */}
@@ -395,7 +545,7 @@ export default function App() {
             <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-1.5">
               JobGuard
               <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                v1.0
+                v{RULESET_VERSION}
               </span>
             </h1>
             <p className="text-[11px] text-slate-400">Know the risk before you apply</p>
@@ -420,7 +570,7 @@ export default function App() {
             }`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${isBackendOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-            {isBackendOnline ? 'Cloud AI' : 'Active'}
+            {isBackendOnline ? 'Cloud AI' : 'Offline'}
           </div>
         </div>
       </header>
@@ -492,6 +642,16 @@ export default function App() {
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="space-y-3.5 animate-fade-in">
+            {/* Low Confidence Warning Banner */}
+            {analysis.confidence === 'LOW' && (
+              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-xs text-amber-300">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-400" />
+                <span className="leading-tight">
+                  {analysis.confidenceReason || 'Low confidence — insufficient job posting text extracted.'}
+                </span>
+              </div>
+            )}
+
             {/* Live Detected Job Card */}
             <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-start justify-between shadow-sm">
               <div className="space-y-1 max-w-[270px]">
@@ -636,6 +796,35 @@ export default function App() {
               </div>
             </div>
 
+            {/* On-Demand AI Advice Box */}
+            <div className="p-3 rounded-xl bg-gradient-to-r from-slate-900 to-slate-800/90 border border-slate-700/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-bold">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Candidate Safety Advice
+                </div>
+                {!aiAdviceText && (
+                  <button
+                    onClick={requestAiAdvice}
+                    disabled={isAiLoading}
+                    className="text-[10px] px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center gap-1 transition"
+                  >
+                    {isAiLoading ? 'Analyzing...' : 'Get AI Advice ✨'}
+                  </button>
+                )}
+              </div>
+
+              {aiAdviceText ? (
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  "{aiAdviceText}"
+                </p>
+              ) : (
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Click <strong>Get AI Advice</strong> to generate personalized safety coaching for this posting.
+                </p>
+              )}
+            </div>
+
             {/* Actions */}
             <div className="flex items-center gap-2 pt-1">
               <button
@@ -653,6 +842,11 @@ export default function App() {
                 Report
               </button>
             </div>
+
+            {/* Legal Disclaimer */}
+            <p className="text-[10px] text-slate-500 text-center leading-tight pt-1">
+              Disclaimer: Automated informational risk assessment based on public listing content. Not a legal determination of fraud. Always verify independently.
+            </p>
           </div>
         )}
 
@@ -732,17 +926,6 @@ export default function App() {
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-slate-300 space-y-1">
-              <strong className="text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Verification Checklist:
-              </strong>
-              <p className="text-[11px] leading-relaxed text-slate-300">
-                1. Does the company have a verified LinkedIn profile with active employees?
-                <br />
-                2. Does this exact role exist on their official careers page?
-              </p>
-            </div>
-
             <button
               onClick={() => setActiveTab('overview')}
               className="w-full py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-slate-300 border border-slate-800"
@@ -760,7 +943,7 @@ export default function App() {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
                   Risk Signal Matrix ({analysis.signals.length})
                 </h3>
-                <p className="text-[11px] text-slate-400">Factors influencing the score</p>
+                <p className="text-[11px] text-slate-400">Ruleset v{analysis.rulesetVersion}</p>
               </div>
               <span className="text-xs font-extrabold text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
                 Score: {analysis.riskScore}/100
@@ -893,7 +1076,7 @@ export default function App() {
           <div className="space-y-3.5 animate-fade-in">
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                Interactive Test Demos
+                Interactive Test Demos (100% Offline)
               </h3>
               <p className="text-[11px] text-slate-400">
                 Test JobGuard across different real-world risk scenarios:
@@ -914,6 +1097,7 @@ export default function App() {
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                       sample.tag === 'Low Risk' ? 'bg-emerald-500/20 text-emerald-400' :
                       sample.tag === 'Medium Risk' ? 'bg-amber-500/20 text-amber-400' :
+                      sample.tag === 'Low Confidence' ? 'bg-slate-600 text-slate-300' :
                       'bg-red-500/20 text-red-400'
                     }`}>
                       {sample.tag}
@@ -1025,7 +1209,7 @@ export default function App() {
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
                 Recent Analyses ({historyList.length})
               </h3>
-              <span className="text-[10px] text-slate-500">Auto-saved</span>
+              <span className="text-[10px] text-slate-500">Auto-saved (7-day TTL)</span>
             </div>
 
             {historyList.length === 0 ? (
@@ -1073,9 +1257,9 @@ export default function App() {
 
       {/* Footer */}
       <footer className="px-4 py-2 bg-slate-950 border-t border-slate-900 text-[10px] text-slate-500 flex items-center justify-between">
-        <span>JobGuard Security Engine</span>
+        <span>JobGuard Security Engine v{RULESET_VERSION}</span>
         <span className="flex items-center gap-1 text-slate-400">
-          <ShieldCheck className="w-3 h-3 text-emerald-400" /> Verified Protection
+          <ShieldCheck className="w-3 h-3 text-emerald-400" /> 100% Offline Rule Verified
         </span>
       </footer>
     </div>

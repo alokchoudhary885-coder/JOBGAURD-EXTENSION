@@ -2,6 +2,8 @@ export type PlatformType = 'linkedin' | 'internshala' | 'indeed' | 'career_porta
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
+export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
 export interface JobMetadata {
   title: string;
   company: string;
@@ -15,18 +17,34 @@ export interface JobMetadata {
   jobUrl: string;
   platform: PlatformType;
   extractedAt: number;
+  isJsonLd?: boolean;
 }
 
 export type SignalCategory = 'warning' | 'positive' | 'critical';
 
+export type SignalType =
+  | 'payment'
+  | 'contact_channel'
+  | 'email'
+  | 'company_verification'
+  | 'domain'
+  | 'compensation'
+  | 'salary'
+  | 'description_quality'
+  | 'urgency'
+  | 'process'
+  | 'positive'
+  | 'official_match'
+  | 'community';
+
 export interface RiskSignal {
   id: string;
-  type: 'email' | 'domain' | 'payment' | 'salary' | 'off_platform' | 'urgency' | 'official_match' | 'community';
+  type: SignalType;
   category: SignalCategory;
   title: string;
   description: string;
   evidence?: string;
-  impactScore: number; // e.g. +15, +25, -15
+  impactScore: number; // e.g. +35, +30, +15, -10
 }
 
 export interface HealthCheckItem {
@@ -46,10 +64,13 @@ export interface HealthCheck {
 export interface AnalysisResult {
   riskScore: number; // 0 to 100
   riskLevel: RiskLevel;
+  confidence: ConfidenceLevel;
+  confidenceReason?: string;
+  rulesetVersion: string; // e.g. "2.0.0"
   summary: string;
   signals: RiskSignal[];
   healthCheck: HealthCheck;
-  aiGuidance: string;
+  aiGuidance?: string;
   analyzedAt: number;
   job: JobMetadata;
   communityReportsCount: number;

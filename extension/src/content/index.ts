@@ -15,11 +15,56 @@ function isBad(t: string): boolean {
   return BLACKLIST.some(b => c === b || c.startsWith(b));
 }
 
-// 1. Robust LinkedIn Extractor (handles both /jobs/search/ and /jobs/view/)
+// 1. Schema.org JSON-LD Parser (Primary Source)
+function extractJsonLdJob(): JobMetadata | null {
+  try {
+    const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of Array.from(scripts)) {
+      if (!script.textContent) continue;
+      const json = JSON.parse(script.textContent);
+      const items = Array.isArray(json) ? json : [json];
+      for (const item of items) {
+        const type = item['@type'];
+        if (type === 'JobPosting' || (Array.isArray(type) && type.includes('JobPosting'))) {
+          const hiringOrg = typeof item.hiringOrganization === 'string'
+            ? item.hiringOrganization
+            : item.hiringOrganization?.name || '';
+
+          const companyUrl = item.hiringOrganization?.sameAs || item.hiringOrganization?.url || undefined;
+          const loc = typeof item.jobLocation === 'string'
+            ? item.jobLocation
+            : item.jobLocation?.address?.addressLocality || item.jobLocation?.address?.streetAddress || '';
+
+          const salaryVal = item.baseSalary?.value?.value || item.baseSalary?.value;
+          const salaryStr = salaryVal ? `${item.baseSalary?.currency || '₹'} ${salaryVal}` : undefined;
+
+          if (item.title && hiringOrg) {
+            return {
+              title: item.title,
+              company: hiringOrg,
+              location: loc || undefined,
+              salary: salaryStr,
+              companyWebsite: companyUrl,
+              description: item.description || '',
+              jobUrl: window.location.href,
+              platform: 'career_portal',
+              extractedAt: Date.now(),
+              isJsonLd: true
+            };
+          }
+        }
+      }
+    }
+  } catch {
+    // Continue to DOM extractors
+  }
+  return null;
+}
+
+// 2. LinkedIn DOM Extractor
 function extractLinkedInJob(): JobMetadata {
   const detailPane = document.querySelector('.jobs-search__job-details, .jobs-details__main-content, .job-view-layout, .jobs-details, .job-view-layout-wrapper') || document;
 
-  // Title extraction
   let title = '';
   const titleSelectors = [
     'h1.top-card-layout__title',
@@ -44,7 +89,6 @@ function extractLinkedInJob(): JobMetadata {
     }
   }
 
-  // Company Name extraction
   let company = '';
   const companySelectors = [
     'a[href*="/company/"]',
@@ -68,7 +112,7 @@ function extractLinkedInJob(): JobMetadata {
     }
   }
 
-  // Document Title Fallback (e.g., "Backend Developer - Cynbit Technologies | LinkedIn")
+  // Document Title Fallback
   if ((!title || !company || isBad(title) || isBad(company)) && document.title.includes('LinkedIn')) {
     const cleanDocTitle = document.title.replace(/\([0-9]+\)/g, '').trim();
     const parts = cleanDocTitle.split(/[-|–•]/);
@@ -81,20 +125,18 @@ function extractLinkedInJob(): JobMetadata {
     }
   }
 
-  // Location & Salary
   const locationEl = detailPane.querySelector('.topcard__flavor--bullet, .top-card-layout__second-subline, .job-details-jobs-unified-top-card__bullet, .jobs-unified-top-card__bullet, .topcard__flavor');
   const location = locationEl?.textContent?.trim() || '';
 
   const salaryEl = detailPane.querySelector('.job-details-preferences-and-skills, .job-details-jobs-unified-top-card__job-insight--highlight, .compensation__salary');
   const salary = salaryEl?.textContent?.trim() || '';
 
-  // Description
   const descEl = detailPane.querySelector('.show-more-less-html__markup, .description__text, #job-details, .jobs-description__content, .jobs-description-content__text');
   const description = descEl ? (descEl as HTMLElement).innerText?.trim() : document.body.innerText.slice(0, 3000);
 
   return {
-    title: (!isBad(title) && title.length > 2) ? title : 'Software Developer',
-    company: (!isBad(company) && company.length > 1) ? company : 'Company',
+    title: (!isBad(title) && title.length > 2) ? title : 'Software Role',
+    company: (!isBad(company) && company.length > 1) ? company : 'Company on LinkedIn',
     location: location || undefined,
     salary: salary || undefined,
     description: description || '',
@@ -104,7 +146,7 @@ function extractLinkedInJob(): JobMetadata {
   };
 }
 
-// 2. Robust Internshala Extractor
+// 3. Internshala DOM Extractor
 function extractInternshalaJob(): JobMetadata {
   const modalOrContainer = document.querySelector('.detail_view, .modal-content, .individual_internship, #details_container') || document.body;
 
@@ -160,7 +202,7 @@ function extractInternshalaJob(): JobMetadata {
 
   return {
     title: title || 'Internshala Role',
-    company: company || 'Employer',
+    company: company || 'Employer on Internshala',
     location: location || undefined,
     salary: salary || undefined,
     description: description || '',
@@ -170,7 +212,7 @@ function extractInternshalaJob(): JobMetadata {
   };
 }
 
-// 3. Robust Indeed Extractor
+// 4. Indeed DOM Extractor
 function extractIndeedJob(): JobMetadata {
   const title = document.querySelector('h1.jobsearch-JobInfoHeader-title, [data-testid="jobsearch-JobInfoHeader-title"], h1')?.textContent?.trim() || '';
   const company = document.querySelector('[data-company-name="true"], .jobsearch-InlineCompanyRating-companyHeader, a[href*="/cmp/"], .companyOverviewLink')?.textContent?.trim() || '';
@@ -181,7 +223,7 @@ function extractIndeedJob(): JobMetadata {
 
   return {
     title: (!isBad(title) && title.length > 2) ? title : 'Indeed Opening',
-    company: (!isBad(company) && company.length > 1) ? company : 'Company',
+    company: (!isBad(company) && company.length > 1) ? company : 'Company on Indeed',
     location: location || undefined,
     salary: salary || undefined,
     description: description || '',
@@ -192,17 +234,14 @@ function extractIndeedJob(): JobMetadata {
 }
 
 export function extractJobDetails(): JobMetadata {
-  const host = window.location.hostname.toLowerCase();
+  // Check JSON-LD schema first
+  const jsonLdJob = extractJsonLdJob();
+  if (jsonLdJob) return jsonLdJob;
 
-  if (host.includes('linkedin.com')) {
-    return extractLinkedInJob();
-  }
-  if (host.includes('internshala.com')) {
-    return extractInternshalaJob();
-  }
-  if (host.includes('indeed.com')) {
-    return extractIndeedJob();
-  }
+  const host = window.location.hostname.toLowerCase();
+  if (host.includes('linkedin.com')) return extractLinkedInJob();
+  if (host.includes('internshala.com')) return extractInternshalaJob();
+  if (host.includes('indeed.com')) return extractIndeedJob();
 
   // Generic fallback
   const title = document.querySelector('h1')?.innerText?.trim() || document.title.split('-')[0].split('|')[0].trim();
@@ -229,7 +268,7 @@ function renderInPageBadge(result: AnalysisResult) {
     badgeContainer = null;
   }
 
-  const { riskScore, riskLevel, job } = result;
+  const { riskScore, riskLevel, job, confidence } = result;
 
   let badgeBg = '#10B981';
   let badgeEmoji = '🟢';
@@ -283,6 +322,7 @@ function renderInPageBadge(result: AnalysisResult) {
       <span style="color: #CBD5E1; font-size: 12px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
         ${job.company}
       </span>
+      ${confidence === 'LOW' ? '<span style="font-size:10px; color:#94A3B8; background:rgba(255,255,255,0.1); border-radius:4px; padding:1px 4px;">Low Data</span>' : ''}
     </div>
     <div style="margin-left: 4px; background: rgba(255,255,255,0.1); border-radius: 12px; padding: 2px 8px; font-size: 11px; color: #E2E8F0;">
       Verify 🛡️
@@ -331,6 +371,30 @@ if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
   });
 }
 
+// SPA Navigation Listener (history.pushState / popstate)
+let lastUrl = window.location.href;
+function checkUrlChange() {
+  const currentUrl = window.location.href;
+  if (currentUrl !== lastUrl) {
+    lastUrl = currentUrl;
+    setTimeout(runAnalysis, 400);
+  }
+}
+
+window.addEventListener('popstate', checkUrlChange);
+
+const originalPushState = history.pushState;
+history.pushState = function(...args) {
+  originalPushState.apply(this, args);
+  checkUrlChange();
+};
+
+const originalReplaceState = history.replaceState;
+history.replaceState = function(...args) {
+  originalReplaceState.apply(this, args);
+  checkUrlChange();
+};
+
 // Live click listener for job selection in list view
 document.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
@@ -345,9 +409,9 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Observe DOM & URL changes for SPAs
+// Mutation Observer on DOM
 const observer = new MutationObserver(() => {
-  setTimeout(runAnalysis, 600);
+  checkUrlChange();
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
