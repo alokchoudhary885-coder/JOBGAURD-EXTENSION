@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JobGuard — Live Web Simulator & Scam Detector</title>
+  <meta name="description" content="100% Offline-first risk scoring engine to detect fake jobs, registration fee scams, and recruitment phishing on LinkedIn, Internshala, and Indeed.">
+  <link rel="icon" href="https://img.icons8.com/fluency/48/shield.png" type="image/png">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              500: '#10b981',
+              600: '#059669',
+              900: '#064e3b',
+            },
+            dark: {
+              900: '#0B0F17',
+              800: '#111827',
+              700: '#1F2937',
+              600: '#374151'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    .glass-card {
+      background: rgba(17, 24, 39, 0.75);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .glow-emerald {
+      box-shadow: 0 0 35px -5px rgba(16, 185, 129, 0.3);
+    }
+    .glow-rose {
+      box-shadow: 0 0 35px -5px rgba(244, 63, 94, 0.3);
+    }
+  </style>
+</head>
+<body class="bg-[#0B0F17] text-slate-100 min-h-screen font-sans antialiased selection:bg-emerald-500 selection:text-white">
+
+  <!-- Navbar -->
+  <nav class="border-b border-slate-800/80 sticky top-0 z-50 bg-[#0B0F17]/90 backdrop-blur-md">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-400">
+          <i data-lucide="shield-check" class="w-6 h-6"></i>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-black text-xl tracking-tight bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent">JobGuard</span>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono">v2.0.0</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <a href="#simulator" class="text-sm font-medium text-slate-300 hover:text-emerald-400 transition hidden sm:inline-block">Interactive Demo</a>
+        <a href="#how-it-works" class="text-sm font-medium text-slate-300 hover:text-emerald-400 transition hidden sm:inline-block">Scoring Rules</a>
+        <a href="https://github.com/alokchoudhary885-coder/JOBGAURD-EXTENSION" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm font-semibold text-white border border-slate-700 transition">
+          <i data-lucide="github" class="w-4 h-4"></i>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <header class="relative overflow-hidden pt-12 pb-16 px-4">
+    <div class="absolute inset-0 -z-10 flex items-center justify-center">
+      <div class="w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-3xl"></div>
+      <div class="w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-3xl"></div>
+    </div>
+
+    <div class="max-w-4xl mx-auto text-center space-y-6">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+        <span>100% Offline Client-Side Risk Engine • No Data Collected</span>
+      </div>
+
+      <h1 class="text-4xl sm:text-6xl font-extrabold tracking-tight leading-tight">
+        Know the Risk <span class="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">Before You Apply.</span>
+      </h1>
+
+      <p class="text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+        Real-time scam detection for job seekers. Instantly catches upfront registration fees, WhatsApp lures, and identity theft traps on LinkedIn, Internshala, & Indeed.
+      </p>
+
+      <div class="flex flex-wrap items-center justify-center gap-4 pt-2">
+        <a href="#simulator" class="px-6 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold shadow-lg shadow-emerald-500/20 transition flex items-center gap-2">
+          <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+          <span>Try Live Demo Simulator</span>
+        </a>
+        <a href="https://github.com/alokchoudhary885-coder/JOBGAURD-EXTENSION/raw/main/JobGuard-v2.0.0-ChromeStore.zip" class="px-6 py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold border border-slate-700 transition flex items-center gap-2">
+          <i data-lucide="download" class="w-4 h-4 text-emerald-400"></i>
+          <span>Download Extension (ZIP)</span>
+        </a>
+      </div>
+
+      <!-- Quick Feature Highlights -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-8 max-w-3xl mx-auto text-left">
+        <div class="p-3.5 rounded-xl glass-card">
+          <div class="text-emerald-400 font-bold text-lg mb-1">0–100</div>
+          <div class="text-xs text-slate-400">Mathematical Risk Meter</div>
+        </div>
+        <div class="p-3.5 rounded-xl glass-card">
+          <div class="text-teal-400 font-bold text-lg mb-1">100% Offline</div>
+          <div class="text-xs text-slate-400">Zero Browser Tracking</div>
+        </div>
+        <div class="p-3.5 rounded-xl glass-card">
+          <div class="text-cyan-400 font-bold text-lg mb-1">🇮🇳 Hinglish</div>
+          <div class="text-xs text-slate-400">Regional Scam Coverage</div>
+        </div>
+        <div class="p-3.5 rounded-xl glass-card">
+          <div class="text-amber-400 font-bold text-lg mb-1">Role-Aware</div>
+          <div class="text-xs text-slate-400">Protects High-Pay SDEs</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Live Simulator Section -->
+  <section id="simulator" class="py-12 px-4 max-w-6xl mx-auto">
+    <div class="text-center mb-8">
+      <h2 class="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center justify-center gap-2">
+        <i data-lucide="activity" class="text-emerald-400 w-7 h-7"></i>
+        <span>Live Risk Engine Simulator</span>
+      </h2>
+      <p class="text-sm text-slate-400 mt-2">Test any job posting text below or pick a pre-loaded real-world scenario:</p>
+
+      <!-- Preset Scenarios -->
+      <div class="flex flex-wrap items-center justify-center gap-2 mt-4">
+        <button onclick="loadScenario('critical')" class="px-3.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition flex items-center gap-1.5">
+          <span>🔴 Registration Fee Extortion</span>
+        </button>
+        <button onclick="loadScenario('startup')" class="px-3.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold transition flex items-center gap-1.5">
+          <span>🟡 Unverified Startup (WhatsApp)</span>
+        </button>
+        <button onclick="loadScenario('hinglish')" class="px-3.5 py-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-xs font-semibold transition flex items-center gap-1.5">
+          <span>🇮🇳 Hinglish ("Ghar Baithe")</span>
+        </button>
+        <button onclick="loadScenario('enterprise')" class="px-3.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition flex items-center gap-1.5">
+          <span>🟢 Stripe Senior SDE (Verified)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Simulator Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      
+      <!-- Input Panel -->
+      <div class="lg:col-span-6 glass-card rounded-2xl p-6 space-y-4">
+        <h3 class="font-bold text-slate-200 text-sm flex items-center gap-2">
+          <i data-lucide="edit-3" class="w-4 h-4 text-emerald-400"></i>
+          <span>Job Details Input</span>
+        </h3>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Job Title</label>
+            <input type="text" id="jobTitle" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 focus:outline-none focus:border-emerald-500" placeholder="e.g. Data Entry Assistant">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Company Name</label>
+            <input type="text" id="jobCompany" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 focus:outline-none focus:border-emerald-500" placeholder="e.g. FastJobs Online">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Recruiter Email (Optional)</label>
+            <input type="text" id="recruiterEmail" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 focus:outline-none focus:border-emerald-500" placeholder="e.g. hr.careers@gmail.com">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">Stated Salary (Optional)</label>
+            <input type="text" id="jobSalary" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 focus:outline-none focus:border-emerald-500" placeholder="e.g. ₹85,000 / month">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Company Website or Job Portal URL</label>
+          <input type="text" id="jobUrl" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 focus:outline-none focus:border-emerald-500" placeholder="e.g. https://internshala.com/job/detail/123">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">Job Description / Recruitment Message</label>
+          <textarea id="jobDescription" rows="5" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 focus:outline-none focus:border-emerald-500 font-mono" placeholder="Paste job description or WhatsApp recruitment message here..."></textarea>
+        </div>
+
+        <button onclick="runAnalysis()" class="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20">
+          <i data-lucide="shield" class="w-5 h-5 fill-current"></i>
+          <span>Analyze Job Posting in Browser</span>
+        </button>
+      </div>
+
+      <!-- Result Panel -->
+      <div class="lg:col-span-6 space-y-4">
+        
+        <!-- Score Card -->
+        <div id="resultCard" class="glass-card rounded-2xl p-6 transition-all duration-300">
+          
+          <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-800">
+            <div>
+              <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Calculated Risk Level</div>
+              <div id="riskLevelBadge" class="text-2xl font-black mt-1 text-emerald-400">LOW RISK</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Risk Score</div>
+              <div id="riskScoreText" class="text-3xl font-black mt-1 text-slate-100"><span id="scoreNumber">0</span><span class="text-slate-500 text-lg font-normal">/100</span></div>
+            </div>
+          </div>
+
+          <!-- Risk Progress Bar -->
+          <div class="w-full bg-slate-800 rounded-full h-3 mb-6 overflow-hidden">
+            <div id="scoreBar" class="h-full bg-emerald-500 transition-all duration-500 rounded-full" style="width: 0%"></div>
+          </div>
+
+          <!-- Summary Alert -->
+          <div id="summaryBox" class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-medium mb-6">
+            Standard hiring patterns detected. No critical anomalies identified.
+          </div>
+
+          <!-- Health Matrix Grid -->
+          <div class="grid grid-cols-2 gap-3 mb-6">
+            <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <div class="text-[11px] text-slate-400">Corporate Domain</div>
+              <div id="healthCompany" class="text-xs font-semibold text-slate-200 mt-1">Standard Portal</div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <div class="text-[11px] text-slate-400">Recruiter Email</div>
+              <div id="healthEmail" class="text-xs font-semibold text-slate-200 mt-1">Not Disclosed</div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <div class="text-[11px] text-slate-400">Salary Realism</div>
+              <div id="healthSalary" class="text-xs font-semibold text-slate-200 mt-1">Standard</div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <div class="text-[11px] text-slate-400">Channel Type</div>
+              <div id="healthChannel" class="text-xs font-semibold text-slate-200 mt-1">Standard Web Portal</div>
+            </div>
+          </div>
+
+          <!-- Evidence List -->
+          <div>
+            <div class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center justify-between">
+              <span>Triggered Mathematical Signals</span>
+              <span id="signalsCount" class="text-emerald-400">0 Signals</span>
+            </div>
+            <div id="signalsList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+              <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-400 text-center">
+                Click "Analyze Job Posting" to see mathematical evidence.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section id="how-it-works" class="py-16 px-4 max-w-6xl mx-auto border-t border-slate-800/80">
+    <div class="text-center max-w-2xl mx-auto mb-12">
+      <h2 class="text-3xl font-extrabold text-white">How JobGuard Calculates Risk</h2>
+      <p class="text-slate-400 text-sm mt-2">Unlike opaque AI wrappers, JobGuard uses a transparent, explainable 12-factor mathematical engine that runs 100% locally in your browser.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      
+      <!-- Card 1: Critical Factors -->
+      <div class="p-6 rounded-2xl glass-card space-y-4 border-t-2 border-t-rose-500">
+        <div class="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-400 font-bold">
+          <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white">Critical Scam Flags</h3>
+        <ul class="text-xs text-slate-300 space-y-2.5">
+          <li class="flex items-start gap-2">
+            <span class="text-rose-400 font-mono font-bold">+35</span>
+            <span>Registration, training, uniform, laptop, or processing fee extortion.</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-rose-400 font-mono font-bold">+30</span>
+            <span>Premature bank account, UPI PIN, or debit card verification requests.</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Card 2: Warning Factors -->
+      <div class="p-6 rounded-2xl glass-card space-y-4 border-t-2 border-t-amber-500">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400 font-bold">
+          <i data-lucide="help-circle" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white">Warning Indicators</h3>
+        <ul class="text-xs text-slate-300 space-y-2.5">
+          <li class="flex items-start gap-2">
+            <span class="text-amber-400 font-mono font-bold">+15</span>
+            <span>Recruiter uses free webmail (@gmail, @yahoo) instead of company domain.</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-amber-400 font-mono font-bold">+15</span>
+            <span>Directing candidates to personal WhatsApp or Telegram channels.</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-amber-400 font-mono font-bold">+15</span>
+            <span>Unrealistic salary (>₹50k/mo) for no-experience or data-entry roles.</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-amber-400 font-mono font-bold">+10</span>
+            <span>Instant offer letter promised without structured interviews.</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Card 3: Trust Factors -->
+      <div class="p-6 rounded-2xl glass-card space-y-4 border-t-2 border-t-emerald-500">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 font-bold">
+          <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white">Positive Trust Credits</h3>
+        <ul class="text-xs text-slate-300 space-y-2.5">
+          <li class="flex items-start gap-2">
+            <span class="text-emerald-400 font-mono font-bold">−10</span>
+            <span>Authentic corporate email domain verified against employer.</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-emerald-400 font-mono font-bold">−10</span>
+            <span>Hosted on verified Enterprise ATS (Greenhouse, Lever, Workday) or Schema.org.</span>
+          </li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 30-Second Install Guide -->
+  <section class="py-16 px-4 max-w-4xl mx-auto border-t border-slate-800/80 text-center space-y-8">
+    <div>
+      <h2 class="text-3xl font-extrabold text-white">Install JobGuard in 30 Seconds</h2>
+      <p class="text-sm text-slate-400 mt-2">Zero cost, no credit card, runs locally on Google Chrome, Microsoft Edge, and Brave.</p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
+      <div class="p-5 rounded-2xl glass-card">
+        <div class="text-2xl font-black text-emerald-400 mb-2">1</div>
+        <div class="font-bold text-white text-sm">Download ZIP</div>
+        <p class="text-xs text-slate-400 mt-1">Download the official pre-built <a href="https://github.com/alokchoudhary885-coder/JOBGAURD-EXTENSION/raw/main/JobGuard-v2.0.0-ChromeStore.zip" class="text-emerald-400 underline">JobGuard ZIP bundle</a> and extract it.</p>
+      </div>
+
+      <div class="p-5 rounded-2xl glass-card">
+        <div class="text-2xl font-black text-emerald-400 mb-2">2</div>
+        <div class="font-bold text-white text-sm">Open Extensions</div>
+        <p class="text-xs text-slate-400 mt-1">In Chrome, go to <code class="bg-slate-900 px-1 py-0.5 rounded text-emerald-300">chrome://extensions</code> and enable <strong>Developer mode</strong>.</p>
+      </div>
+
+      <div class="p-5 rounded-2xl glass-card">
+        <div class="text-2xl font-black text-emerald-400 mb-2">3</div>
+        <div class="font-bold text-white text-sm">Load Unpacked</div>
+        <p class="text-xs text-slate-400 mt-1">Click <strong>Load unpacked</strong> and select the unzipped folder. Pin JobGuard and browse safely!</p>
+      </div>
+    </div>
+
+    <div class="pt-4">
+      <a href="https://github.com/alokchoudhary885-coder/JOBGAURD-EXTENSION/raw/main/JobGuard-v2.0.0-ChromeStore.zip" class="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-base shadow-xl shadow-emerald-500/20 transition">
+        <i data-lucide="download" class="w-5 h-5"></i>
+        <span>Download JobGuard Extension (v2.0.0 ZIP)</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/80 py-8 px-4 text-center text-xs text-slate-500 space-y-2">
+    <p>🛡️ JobGuard — An Open Source Cybersecurity & Candidate Protection Project under MIT License.</p>
+    <p>Automated informational risk assessment based on public listing content. Not a legal determination of fraud.</p>
+    <p class="pt-2">
+      <a href="https://github.com/alokchoudhary885-coder/JOBGAURD-EXTENSION" target="_blank" class="text-slate-400 hover:text-emerald-400 underline">GitHub Repository</a> • 
+      <a href="https://github.com/alokchoudhary885-coder/JOBGAURD-EXTENSION/releases/tag/v2.0.0" target="_blank" class="text-slate-400 hover:text-emerald-400 underline">Release v2.0.0</a>
+    </p>
+  </footer>
+
+  <!-- Core Deterministic Risk Engine Implementation in Pure JS -->
+  <script>
+    lucide.createIcons();
+
+    const SCENARIOS = {
+      critical: {
+        title: 'Online Typing & Excel Operator',
+        company: 'FastJobs Online Hub',
+        email: 'quickhire.jobs2026@tempmail.com',
+        salary: '₹85,000 / month',
+        url: 'https://internshala.com/job/detail/fake-entry',
+        desc: 'Earn ₹85,000 per month working from home! No interview needed direct selection. Selected candidates must pay a refundable registration fee of INR 1500 for training kit and verification ID. Contact HR manager on WhatsApp wa.me/919911223344 to pay.'
+      },
+      startup: {
+        title: 'React.js Frontend Intern',
+        company: 'NextGen Digital Studio',
+        email: 'nextgenhub.careers@gmail.com',
+        salary: '₹15,000 / month',
+        url: 'https://linkedin.com/jobs/view/445129',
+        desc: 'We are looking for React.js interns to build landing pages and dashboard widgets. Send resume to nextgenhub.careers@gmail.com and drop a message on WhatsApp wa.me/919988776655 to confirm interview timing.'
+      },
+      hinglish: {
+        title: 'Ghar Baithe Typing Job',
+        company: 'Online Seva Kendra Group',
+        email: 'ghar.baithe.jobs@gmail.com',
+        salary: '₹60,000 / month',
+        url: 'https://internshala.com/job/detail/ghar-baithe-99',
+        desc: 'Ghar baithe kamayein 60000 per month! Bina interview job direct selection bina kisi qualification ke. WhatsApp par message karein wa.me/919876543210 aaj hi.'
+      },
+      enterprise: {
+        title: 'Staff Frontend Engineer - Payments',
+        company: 'Stripe Inc.',
+        email: 'recruiting@stripe.com',
+        salary: '$180,000 - $220,000 / year',
+        url: 'https://jobs.lever.co/stripe/staff-frontend-eng',
+        desc: 'Stripe is seeking a Staff Frontend Engineer to lead architecture across global checkout infrastructure. Candidates must have 6+ years of experience with React, TypeScript, and high-reliability web systems. Comprehensive healthcare, parental leave, and competitive equity.'
+      }
+    };
+
+    function loadScenario(type) {
+      const s = SCENARIOS[type];
+      if (!s) return;
+      document.getElementById('jobTitle').value = s.title;
+      document.getElementById('jobCompany').value = s.company;
+      document.getElementById('recruiterEmail').value = s.email;
+      document.getElementById('jobSalary').value = s.salary;
+      document.getElementById('jobUrl').value = s.url;
+      document.getElementById('jobDescription').value = s.desc;
+      runAnalysis();
+    }
+
+    const FREE_EMAIL_DOMAINS = ['gmail.com', 'yahoo.com', 'yahoo.co.in', 'hotmail.com', 'outlook.com', 'rediffmail.com', 'aol.com', 'protonmail.com', 'mailinator.com', 'tempmail.com', 'zoho.com', 'yopmail.com', 'gmx.com'];
+    const REPUTABLE_ATS = ['greenhouse.io', 'lever.co', 'workday.com', 'myworkdayjobs.com', 'smartrecruiters.com', 'ashbyhq.com', 'jobvite.com', 'bamboohr.com', 'icims.com', 'taleo.net', 'recruitee.com', 'rippling.com'];
+    const URGENCY_PHRASES = ['apply immediately', 'limited seats', 'slots filling fast', 'urgent hiring', 'urgent requirement', 'immediate joining', 'direct selection', 'limited vacancies', 'hurry up', 'apply right now', 'offer letter today', 'instant joining', 'turant selection', 'turant joining', 'jaldi apply karein', 'jaldi karein', 'limited seats bache hain', 'aaj hi join karein', 'urgent vacancy hai', 'turant offer letter'];
+
+    function analyzeJobClientSide(job) {
+      const signals = [];
+      let score = 0;
+      const desc = (job.desc || '').toLowerCase();
+      const title = (job.title || '').toLowerCase();
+      const url = (job.url || '').toLowerCase();
+
+      // 1. Payment Requests (+35 / +30)
+      const feeMatch = desc.match(/(registration|training|security|processing|documentation|uniform|laptop|software|id\s*card)\s*(fee|deposit|charge|amount|cost|money|paisa|paise|fees)|refundable\s*deposit|pay\s*(inr|rs\.?|₹|\$)\s*\d+|registration\s*ka\s*paisa|security\s*jama\s*karein|training\s*fees\s*dena\s*hoga/i);
+      if (feeMatch) {
+        signals.push({ id: 'fee_extortion', impactScore: 35, title: 'Upfront Payment or Deposit Required', desc: 'Mentions upfront fees or refundable deposits. Legitimate employers never charge candidates.', evidence: feeMatch[0] });
+        score += 35;
+      }
+
+      const bankMatch = desc.match(/(bank\s*account|upi\s*pin|cvv|debit\s*card|credit\s*card|net\s*banking|otp\s*verification|crypto\s*wallet|send\s*money|transfer\s*funds|khata\s*number|bank\s*detail)/i);
+      if (bankMatch) {
+        signals.push({ id: 'sensitive_financial_request', impactScore: 30, title: 'Premature Financial / Bank Details Request', desc: 'Asks for sensitive banking information, UPI PIN, or card details prior to employment.', evidence: bankMatch[0] });
+        score += 30;
+      }
+
+      // 2. Email Contact
+      let email = job.email || (job.desc.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/)?.[1]);
+      let isFreeEmail = false;
+      let isCorporateEmail = false;
+
+      if (email) {
+        const domain = email.split('@')[1]?.toLowerCase();
+        if (domain) {
+          if (FREE_EMAIL_DOMAINS.includes(domain)) {
+            isFreeEmail = true;
+            signals.push({ id: 'free_email_domain', impactScore: 15, title: 'Public Email Domain Used for Official Hiring', desc: `Recruiter uses a public webmail service (@${domain}) instead of an authentic company domain.`, evidence: email });
+            score += 15;
+          } else {
+            isCorporateEmail = true;
+            signals.push({ id: 'corporate_email_domain', impactScore: -10, title: 'Corporate Email Domain Detected', desc: `Recruiter uses authentic corporate domain (@${domain}).`, evidence: email });
+            score -= 10;
+          }
+        }
+      }
+
+      // Off-platform WhatsApp / Telegram
+      const offPlatformMatch = desc.match(/(whatsapp|telegram|wa\.me|t\.me|telegram\.me|inbox\s*me\s*on\s*whatsapp|contact\s*on\s*whatsapp|whatsapp\s*par\s*message\s*karein|telegram\s*group\s*join\s*karein)/i);
+      if (offPlatformMatch && !isCorporateEmail) {
+        signals.push({ id: 'off_platform_redirect', impactScore: 15, title: 'Off-Platform Messaging Recruitment', desc: 'Directs candidates to personal chat apps (WhatsApp/Telegram) without corporate verification.', evidence: offPlatformMatch[0] });
+        score += 15;
+      }
+
+      // 3. Process / No Interview
+      const noInterviewMatch = desc.match(/(instant\s*offer|no\s*interview(\s*needed)?|direct\s*selection|direct\s*joining\s*without\s*interview|offer\s*letter\s*today|no\s*interview\s*required|bina\s*interview(\s*ke)?\s*(job|selection|joining)|seedha\s*selection|aaj\s*hi\s*joining|bina\s*kisi\s*interview)/i);
+      if (noInterviewMatch) {
+        signals.push({ id: 'no_interview_instant_offer', impactScore: 10, title: 'Direct Hiring Without Structured Interview', desc: 'Promises instant selection or appointment letters without standard screening.', evidence: noInterviewMatch[0] });
+        score += 10;
+      }
+
+      // 4. Compensation Realism (Role-Aware)
+      const isSkilledRole = ['engineer', 'developer', 'software', 'frontend', 'backend', 'full stack', 'fullstack', 'devops', 'data scientist', 'machine learning', 'ml engineer', 'architect', 'qa engineer', 'security engineer', 'programmer', 'ui/ux', 'designer'].some(k => title.includes(k));
+      const isLowSkill = ['data entry', 'typing', 'form filling', 'survey', 'rating', 'back office', 'copy paste', 'home based typing', 'typing ka kaam', 'ghar baithe', 'mystery evaluator', 'social media promoter', 'click worker', 'task worker'].some(k => title.includes(k) || desc.includes(k)) || desc.includes('no experience') || desc.includes('no qualification') || desc.includes('bina experience') || desc.includes('bina padhai') || desc.includes('bina kisi qualification');
+      
+      const descPayMatch = desc.match(/(₹\s*[5-9]\d,\d{3}|\$\s*[5-9],\d{3}|[5-9]\d,\d{3}|80000|90000|100000|150000)\s*(per\s*month|\/month|\/mo|mahina|mahine)/i);
+      const salaryPayMatch = job.salary ? /(8[0-9],000|9[0-9],000|[1-9][0-9]{5,})/i.test(job.salary) : false;
+
+      if (isLowSkill && !isSkilledRole && (descPayMatch || salaryPayMatch)) {
+        signals.push({ id: 'unrealistic_compensation', impactScore: 15, title: 'Unrealistic Compensation for Entry-Level Role', desc: 'Abnormally high salary stated for a low-qualification or entry-level role, a common lure.', evidence: job.salary || (descPayMatch ? descPayMatch[0] : 'Abnormal pay rate') });
+        score += 15;
+      }
+
+      // 5. Urgency
+      let urgencyCount = 0;
+      for (const phrase of URGENCY_PHRASES) {
+        if (desc.includes(phrase)) urgencyCount++;
+      }
+      if (!job.salary && urgencyCount > 0) {
+        signals.push({ id: 'no_salary_high_urgency', impactScore: 10, title: 'Missing Salary with High Urgency Pressure', desc: 'Compensation is undisclosed while applying aggressive pressure to register immediately.' });
+        score += 10;
+      } else if (urgencyCount >= 2) {
+        signals.push({ id: 'high_urgency_density', impactScore: 8, title: 'Artificial Scarcity & Pressure Language', desc: 'Exerts aggressive pressure (e.g. "urgent joining", "limited seats", "turant selection").' });
+        score += 8;
+      }
+
+      // Spam Phrasing
+      const spamMatch = desc.match(/(100%\s*gurantee|earn\s*money\s*fastly|daily\s*payment\s*system|home\s*based\s*typing\s*work|part\s*time\s*online\s*work|ghar\s*baithe\s*(kamayein|paise\s*kamaye|kamaye|job|kaam)|rozana\s*(paise|kamai|kamayein)|bina\s*kisi\s*qualification|typing\s*ka\s*kaam\s*ghar\s*se)/i);
+      if (spamMatch) {
+        signals.push({ id: 'spam_language_pattern', impactScore: 5, title: 'Generic Spam Template Detected', desc: 'Phrasing matches mass-posted freelance or data-entry fraud templates.', evidence: spamMatch[0] });
+        score += 5;
+      }
+
+      // 6. ATS / Company Verification
+      const isAts = REPUTABLE_ATS.some(a => url.includes(a));
+      if (isAts) {
+        signals.push({ id: 'verified_ats_portal', impactScore: -10, title: 'Enterprise ATS Portal Verified', desc: 'Position is hosted on a verified applicant tracking system (Lever/Greenhouse/Workday).' });
+        score -= 10;
+      } else if (!isCorporateEmail) {
+        signals.push({ id: 'unverified_company_website', impactScore: 15, title: 'Unverified Corporate Presence', desc: 'No verified official careers portal or corporate domain could be automatically confirmed.' });
+        score += 15;
+      }
+
+      const finalScore = Math.max(0, Math.min(100, score));
+      let riskLevel = 'LOW';
+      if (finalScore >= 76) riskLevel = 'CRITICAL';
+      else if (finalScore >= 51) riskLevel = 'HIGH';
+      else if (finalScore >= 26) riskLevel = 'MEDIUM';
+
+      return {
+        score: finalScore,
+        riskLevel,
+        signals,
+        isCorporateEmail,
+        isFreeEmail,
+        isAts,
+        email,
+        offPlatformMatch
+      };
+    }
+
+    function runAnalysis() {
+      const job = {
+        title: document.getElementById('jobTitle').value.trim() || 'Software Opportunity',
+        company: document.getElementById('jobCompany').value.trim() || 'Company',
+        email: document.getElementById('recruiterEmail').value.trim(),
+        salary: document.getElementById('jobSalary').value.trim(),
+        url: document.getElementById('jobUrl').value.trim(),
+        desc: document.getElementById('jobDescription').value.trim()
+      };
+
+      const result = analyzeJobClientSide(job);
+
+      // Update UI
+      const scoreNum = document.getElementById('scoreNumber');
+      const scoreBar = document.getElementById('scoreBar');
+      const levelBadge = document.getElementById('riskLevelBadge');
+      const summaryBox = document.getElementById('summaryBox');
+      const resultCard = document.getElementById('resultCard');
+
+      scoreNum.innerText = result.score;
+      scoreBar.style.width = result.score + '%';
+
+      resultCard.classList.remove('glow-emerald', 'glow-rose');
+
+      if (result.riskLevel === 'CRITICAL') {
+        levelBadge.innerText = 'CRITICAL RISK 🔴';
+        levelBadge.className = 'text-2xl font-black mt-1 text-rose-500';
+        scoreBar.className = 'h-full bg-rose-500 transition-all duration-500 rounded-full';
+        summaryBox.className = 'p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-medium mb-6';
+        summaryBox.innerText = '🚨 Critical scam signals detected! Posting exhibits high-confidence fee extortion or financial phishing markers.';
+        resultCard.classList.add('glow-rose');
+      } else if (result.riskLevel === 'HIGH') {
+        levelBadge.innerText = 'HIGH RISK 🟠';
+        levelBadge.className = 'text-2xl font-black mt-1 text-orange-500';
+        scoreBar.className = 'h-full bg-orange-500 transition-all duration-500 rounded-full';
+        summaryBox.className = 'p-3.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-300 text-xs font-medium mb-6';
+        summaryBox.innerText = '⚠️ High caution advised: Multiple recruitment anomalies and unverified channels identified.';
+      } else if (result.riskLevel === 'MEDIUM') {
+        levelBadge.innerText = 'MEDIUM RISK 🟡';
+        levelBadge.className = 'text-2xl font-black mt-1 text-amber-400';
+        scoreBar.className = 'h-full bg-amber-500 transition-all duration-500 rounded-full';
+        summaryBox.className = 'p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium mb-6';
+        summaryBox.innerText = '⚠️ Moderate risk: Unverified contact channels or unconfirmed corporate presence detected.';
+      } else {
+        levelBadge.innerText = 'LOW RISK 🟢';
+        levelBadge.className = 'text-2xl font-black mt-1 text-emerald-400';
+        scoreBar.className = 'h-full bg-emerald-500 transition-all duration-500 rounded-full';
+        summaryBox.className = 'p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-medium mb-6';
+        summaryBox.innerText = '✅ Standard hiring patterns detected. No critical anomalies identified.';
+        resultCard.classList.add('glow-emerald');
+      }
+
+      // Health Matrix
+      document.getElementById('healthCompany').innerText = result.isAts ? 'Enterprise ATS Verified' : 'Standard Web Portal';
+      document.getElementById('healthEmail').innerText = result.isCorporateEmail ? 'Corporate Domain (@' + result.email.split('@')[1] + ')' : (result.isFreeEmail ? 'Public Webmail (@' + result.email.split('@')[1] + ')' : 'Not Disclosed');
+      document.getElementById('healthSalary').innerText = job.salary ? job.salary : 'Disclosed on Application';
+      document.getElementById('healthChannel').innerText = result.offPlatformMatch ? 'WhatsApp / Off-Platform' : 'Standard Portal Application';
+
+      // Signals List
+      const signalsCount = document.getElementById('signalsCount');
+      const signalsList = document.getElementById('signalsList');
+      signalsCount.innerText = result.signals.length + ' Signals Fired';
+
+      if (result.signals.length === 0) {
+        signalsList.innerHTML = '<div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-medium">No negative risk indicators detected.</div>';
+      } else {
+        signalsList.innerHTML = result.signals.map(s => {
+          const isPositive = s.impactScore < 0;
+          const badgeClass = isPositive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : (s.impactScore >= 30 ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30');
+          return `
+            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+              <div class="flex items-center justify-between font-bold text-slate-200 mb-1">
+                <span>${s.title}</span>
+                <span class="px-2 py-0.5 rounded-full border ${badgeClass} font-mono">${s.impactScore > 0 ? '+' : ''}${s.impactScore} pts</span>
+              </div>
+              <div class="text-slate-400 text-[11px]">${s.desc}</div>
+              ${s.evidence ? `<div class="mt-1 text-[11px] text-slate-500 font-mono">Matched: "${s.evidence}"</div>` : ''}
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // Default Load Scenario
+    window.addEventListener('DOMContentLoaded', () => {
+      loadScenario('critical');
+    });
+  </script>
+</body>
+</html>
